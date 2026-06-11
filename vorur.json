@@ -1,83 +1,658 @@
 [
-  {"id":"e1", "cat":"Efnavörur","sup":"Jákó",   "sku":"",             "name":"Hanskar í sandkassa",                        "qty":"1 Par"},
-  {"id":"e2", "cat":"Efnavörur","sup":"Jákó",   "sku":"",             "name":"Jákó 5000",                                  "qty":"3 Brúsar"},
-  {"id":"e3", "cat":"Efnavörur","sup":"Jákó",   "sku":"",             "name":"Sandi í sandkassann (Strahlglasperlen 200-300)","qty":"3 Pokar"},
-  {"id":"e4", "cat":"Efnavörur","sup":"Kemi",   "sku":"8822",         "name":"3M – Grímur með ventli",                     "qty":"1 pk. (10stk.)"},
-  {"id":"e5", "cat":"Efnavörur","sup":"Kemi",   "sku":"fs135awc",     "name":"Bensli svört 2,5 × 135mm (100 stk.)",        "qty":"2 pokar"},
-  {"id":"e6", "cat":"Efnavörur","sup":"Kemi",   "sku":"fs200awc",     "name":"Bensli svört 4,5 × 200mm (100 stk.)",        "qty":"2 pokar"},
-  {"id":"e7", "cat":"Efnavörur","sup":"Kemi",   "sku":"fs280awc",     "name":"Bensli svört 4,5 × 280mm (100 stk.)",        "qty":"2 pokar"},
-  {"id":"e8", "cat":"Efnavörur","sup":"Kemi",   "sku":"fs380awc",     "name":"Bensli svört 4,5 × 380mm (100 stk.)",        "qty":"2 pokar"},
-  {"id":"e9", "cat":"Efnavörur","sup":"Kemi",   "sku":"851282",       "name":"Blár pappír",                                "qty":"2 Rúllur"},
-  {"id":"e10","cat":"Efnavörur","sup":"Kemi",   "sku":"5000000376",   "name":"Bosch Superfit TO102",                       "qty":"4 túpur"},
-  {"id":"e11","cat":"Efnavörur","sup":"Kemi",   "sku":"K2-l346ca",    "name":"Brake Caliper Paint",                        "qty":"5 brúsar"},
-  {"id":"e12","cat":"Efnavörur","sup":"Kemi",   "sku":"048V60563",    "name":"Bremsuhreinsir",                             "qty":"1 tunna"},
-  {"id":"e13","cat":"Efnavörur","sup":"Kemi",   "sku":"1900",         "name":"Duct tape",                                  "qty":"2 stk."},
-  {"id":"e14","cat":"Efnavörur","sup":"Kemi",   "sku":"165bk8e",      "name":"Eingagrunar tape svart",                     "qty":"10 rúllur"},
-  {"id":"e15","cat":"Efnavörur","sup":"Kemi",   "sku":"8919",         "name":"Fine lube",                                  "qty":"4 túpur"},
-  {"id":"e16","cat":"Efnavörur","sup":"Kemi",   "sku":"pn07440",      "name":"Flóki arkir brúnn 7440 A-MED 158×224mm",    "qty":"1 Kassi"},
-  {"id":"e17","cat":"Efnavörur","sup":"Kemi",   "sku":"pn61089",      "name":"Flóki arkir grænn 96 A-VFN 158×224mm",      "qty":"1 Kassi"},
-  {"id":"e18","cat":"Efnavörur","sup":"Kemi",   "sku":"9102",         "name":"Foam Clean",                                 "qty":"5 brúsar"},
-  {"id":"e19","cat":"Efnavörur","sup":"Kemi",   "sku":"8805ns45gn",   "name":"Græna tveggja þátta límið",                  "qty":"1 túpa"},
-  {"id":"e20","cat":"Efnavörur","sup":"Kemi",   "sku":"epxdf",        "name":"Græna tveggja þátta límið 10:1 stútar",      "qty":"10 stk."},
-  {"id":"e21","cat":"Efnavörur","sup":"Kemi",   "sku":"1987532000",   "name":"Herpihólkar Rauðir 1,0mm",                   "qty":"2 pokar"},
-  {"id":"e22","cat":"Efnavörur","sup":"Kemi",   "sku":"1987532035",   "name":"Herpihólkar Glært 0,5mm",                    "qty":"2 pokar"},
-  {"id":"e23","cat":"Efnavörur","sup":"Kemi",   "sku":"b504",         "name":"Ísaprópanól IPA99",                          "qty":"5 brúsar"},
-  {"id":"e24","cat":"Efnavörur","sup":"Kemi",   "sku":"994-702-0012", "name":"Meg-A-Loose",                                "qty":"5 brúsar"},
-  {"id":"e25","cat":"Efnavörur","sup":"Kemi",   "sku":"phs-lr3a-aa",  "name":"Rafhlöður AA",                               "qty":"40 stk."},
-  {"id":"e26","cat":"Efnavörur","sup":"Kemi",   "sku":"phs-lr3a-aaa", "name":"Rafhlöður AAA",                              "qty":"40 stk."},
-  {"id":"e27","cat":"Efnavörur","sup":"Kemi",   "sku":"k6331",        "name":"Sílikon sprey",                              "qty":"5 brúsar"},
-  {"id":"e28","cat":"Efnavörur","sup":"Kemi",   "sku":"pn18364",      "name":"Slípiskífa skrúfuð – Davíð odson",           "qty":"1 kassi"},
-  {"id":"e29","cat":"Efnavörur","sup":"Kemi",   "sku":"pn05523",      "name":"Slípiskífa skrúfuð – Ullarskífa Fine",       "qty":"1 kassi (50stk)"},
-  {"id":"e30","cat":"Efnavörur","sup":"Kemi",   "sku":"pn07481",      "name":"Slípiskífa skrúfuð – Ullarskífa medium",     "qty":"1 kassi (50stk)"},
-  {"id":"e31","cat":"Efnavörur","sup":"Kemi",   "sku":"pn27717",      "name":"Slípiskífa skrúfuð – Þunnur 80pappa",        "qty":"1 kassi"},
-  {"id":"e32","cat":"Efnavörur","sup":"Kemi",   "sku":"w125",         "name":"Snertuhreinsir K2 Contact Spray",            "qty":"3 brúsar"},
-  {"id":"e33","cat":"Efnavörur","sup":"Kemi",   "sku":"04056250050",  "name":"Svarta tveggja þátta límið",                 "qty":"1 túpa"},
-  {"id":"e34","cat":"Efnavörur","sup":"Kemi",   "sku":"04056300050",  "name":"Svarta tveggja þátta límið 1:1 stútar",      "qty":"2 pokar"},
-  {"id":"e35","cat":"Efnavörur","sup":"Kemi",   "sku":"8518",         "name":"TF Lube",                                    "qty":"5 brúsar"},
-  {"id":"e36","cat":"Efnavörur","sup":"Kemi",   "sku":"b116",         "name":"Tveggja þátta epoxý lím K2 Metal Bond",      "qty":"1 pk."},
-  {"id":"e37","cat":"Efnavörur","sup":"Kemi",   "sku":"660070",       "name":"Vélaklútar (tuskur) 10 Kg",                  "qty":"1 poki"},
-  {"id":"e38","cat":"Efnavörur","sup":"Kemi",   "sku":"wg500s-8",     "name":"Wonder Grip WG-500B Flex M (8)",             "qty":"2 Stk"},
-  {"id":"e39","cat":"Efnavörur","sup":"Kemi",   "sku":"WG260G-9",     "name":"Wonder Grip® WG-310HY L (9)",                "qty":"1 poki"},
-  {"id":"e40","cat":"Efnavörur","sup":"Kemi",   "sku":"WG260G-10",    "name":"Wonder Grip® WG-310HY XL (10)",              "qty":"1 poki"},
-  {"id":"e41","cat":"Efnavörur","sup":"Kemi",   "sku":"WG260G-11",    "name":"Wonder Grip® WG-310HY XXL (11)",             "qty":"1 poki"},
-  {"id":"e42","cat":"Efnavörur","sup":"Kemi",   "sku":"S671.090.312", "name":"ZF olían",                                   "qty":"1 tunna"},
-  {"id":"e43","cat":"Efnavörur","sup":"Kemi",   "sku":"l352",         "name":"Zinc + Ál sprey",                            "qty":"5 brúsar"},
-  {"id":"e44","cat":"Efnavörur","sup":"Kemi",   "sku":"1018SP",       "name":"Handþvottakrem",                             "qty":"2 Pokar"},
-  {"id":"e45","cat":"Efnavörur","sup":"Kemi",   "sku":"APPG105040",   "name":"Uppsogsmottur",                              "qty":"1 kassi"},
-  {"id":"e46","cat":"Efnavörur","sup":"Tandur", "sku":"634901",       "name":"Gúmmí hanskar Nitril 50PLUS Small",          "qty":"1 kassi"},
-  {"id":"e47","cat":"Efnavörur","sup":"Tandur", "sku":"634903",       "name":"Gúmmí hanskar Nitril 50PLUS Large",          "qty":"1 kassi"},
-  {"id":"e48","cat":"Efnavörur","sup":"Tandur", "sku":"634902",       "name":"Gúmmí hanskar Nitril 50PLUS Medium",         "qty":"1 kassi"},
-  {"id":"e49","cat":"Efnavörur","sup":"Tandur", "sku":"634904",       "name":"Gúmmí hanskar Nitril 50PLUS XL",             "qty":"1 kassi"},
-  {"id":"e50","cat":"Efnavörur","sup":"Tandur", "sku":"304408L",      "name":"Latsex hanskar L",                           "qty":"5 pakkar"},
-  {"id":"e51","cat":"Efnavörur","sup":"Tandur", "sku":"g",            "name":"Planta T55 sápa fyrir skúringarvél",          "qty":"3 Brúsar"},
-  {"id":"e52","cat":"Efnavörur","sup":"Wurth",  "sku":"",             "name":"RTV silicon",                                "qty":"6 stk."},
-  {"id":"p1", "cat":"Perur",    "sup":"Bosch",  "sku":"1987302905",   "name":"D1S – Aðalljós",                             "qty":"1 pk."},
-  {"id":"p2", "cat":"Perur",    "sup":"Bosch",  "sku":"1987302904",   "name":"D2S – Aðalljós",                             "qty":"1 pk."},
-  {"id":"p3", "cat":"Perur",    "sup":"Bosch",  "sku":"1987302907",   "name":"D3S – Aðalljós",                             "qty":"1 pk."},
-  {"id":"p4", "cat":"Perur",    "sup":"Bosch",  "sku":"1987302807",   "name":"HB3 – Aðalljós",                             "qty":"1 pk."},
-  {"id":"p5", "cat":"Perur",    "sup":"Bosch",  "sku":"1987302808",   "name":"HB4 – Aðalljós",                             "qty":"1 pk."},
-  {"id":"p6", "cat":"Perur",    "sup":"Bosch",  "sku":"1987302078",   "name":"H7 – Aðalljós",                              "qty":"1 pk."},
-  {"id":"p7", "cat":"Perur",    "sup":"Bosch",  "sku":"1987302026",   "name":"HIR2 – Aðalljós",                            "qty":"1 pk."},
-  {"id":"p8", "cat":"Perur",    "sup":"Bosch",  "sku":"1987302806",   "name":"H11 – Aðalljós",                             "qty":"1 pk."},
-  {"id":"p9", "cat":"Perur",    "sup":"Bosch",  "sku":"1987302805",   "name":"H8 – Aðalljós",                              "qty":"1 pk."},
-  {"id":"p10","cat":"Perur",    "sup":"Bosch",  "sku":"1987302802",   "name":"H3 – Aðalljós",                              "qty":"1 pk."},
-  {"id":"p11","cat":"Perur",    "sup":"Bosch",  "sku":"1987302801",   "name":"H1 – Aðalljós",                              "qty":"1 pk."},
-  {"id":"p12","cat":"Perur",    "sup":"Bosch",  "sku":"1987302803",   "name":"H4 – Aðalljós",                              "qty":"1 pk."},
-  {"id":"p13","cat":"Perur",    "sup":"Philips","sku":"12580c1",       "name":"H15 – Aðalljós",                             "qty":"1 pk."},
-  {"id":"p14","cat":"Perur",    "sup":"Bosch",  "sku":"1987302264",   "name":"H21W",                                       "qty":"1 pk."},
-  {"id":"p15","cat":"Perur",    "sup":"Bosch",  "sku":"1987302810",   "name":"C5W – Pulsa",                                "qty":"1 pk."},
-  {"id":"p16","cat":"Perur",    "sup":"Bosch",  "sku":"1987302811",   "name":"P21W",                                       "qty":"1 pk."},
-  {"id":"p17","cat":"Perur",    "sup":"Bosch",  "sku":"1987302812",   "name":"PY21W – Stefnuljós",                         "qty":"1 pk."},
-  {"id":"p18","cat":"Perur",    "sup":"Bosch",  "sku":"1987302813",   "name":"P21/4W",                                     "qty":"1 pk."},
-  {"id":"p19","cat":"Perur",    "sup":"Bosch",  "sku":"1987302814",   "name":"P21/5W",                                     "qty":"1 pk."},
-  {"id":"p20","cat":"Perur",    "sup":"Bosch",  "sku":"1987302815",   "name":"R5W",                                        "qty":"1 pk."},
-  {"id":"p21","cat":"Perur",    "sup":"Bosch",  "sku":"1987302816",   "name":"R10W",                                       "qty":"1 pk."},
-  {"id":"p22","cat":"Perur",    "sup":"Bosch",  "sku":"1987302817",   "name":"T4W",                                        "qty":"1 pk."},
-  {"id":"p23","cat":"Perur",    "sup":"Bosch",  "sku":"1987302819",   "name":"W5W – Stöðuljósin",                          "qty":"1 pk."},
-  {"id":"p24","cat":"Perur",    "sup":"Bosch",  "sku":"1987302820",   "name":"WY5W",                                       "qty":"1 pk."},
-  {"id":"p25","cat":"Perur",    "sup":"Bosch",  "sku":"1987302821",   "name":"W16W – Stungu",                              "qty":"1 pk."},
-  {"id":"p26","cat":"Perur",    "sup":"Bosch",  "sku":"1987302822",   "name":"W21W – Stungu",                              "qty":"1 pk."},
-  {"id":"p27","cat":"Perur",    "sup":"Bosch",  "sku":"1987302823",   "name":"W21/5W – Stungu",                            "qty":"1 pk."},
-  {"id":"p28","cat":"Perur",    "sup":"Bosch",  "sku":"1987302824",   "name":"12V 1.2W",                                   "qty":"1 pk."},
-  {"id":"p29","cat":"Perur",    "sup":"Bosch",  "sku":"1987302825",   "name":"12V 10W – Pulsa",                            "qty":"1 pk."}
+  {
+    "id": "e1",
+    "cat": "Efnavörur",
+    "sup": "Jákó",
+    "sku": "",
+    "name": "Hanskar í sandkassa",
+    "qty": "1 Par"
+  },
+  {
+    "id": "e2",
+    "cat": "Efnavörur",
+    "sup": "Jákó",
+    "sku": "",
+    "name": "Jákó 5000",
+    "qty": "3 Brúsar"
+  },
+  {
+    "id": "e3",
+    "cat": "Efnavörur",
+    "sup": "Jákó",
+    "sku": "",
+    "name": "Sandi í sandkassann (Strahlglasperlen 200-300)",
+    "qty": "3 Pokar"
+  },
+  {
+    "id": "e4",
+    "cat": "Efnavörur",
+    "sup": "Kemi",
+    "sku": "8822",
+    "name": "3M – Grímur með ventli",
+    "qty": "1 pk. (10stk.)"
+  },
+  {
+    "id": "e5",
+    "cat": "Efnavörur",
+    "sup": "Kemi",
+    "sku": "fs135awc",
+    "name": "Bensli svört 2,5 × 135mm (100 stk.)",
+    "qty": "2 pokar"
+  },
+  {
+    "id": "e6",
+    "cat": "Efnavörur",
+    "sup": "Kemi",
+    "sku": "fs200awc",
+    "name": "Bensli svört 4,5 × 200mm (100 stk.)",
+    "qty": "2 pokar"
+  },
+  {
+    "id": "e7",
+    "cat": "Efnavörur",
+    "sup": "Kemi",
+    "sku": "fs280awc",
+    "name": "Bensli svört 4,5 × 280mm (100 stk.)",
+    "qty": "2 pokar"
+  },
+  {
+    "id": "e8",
+    "cat": "Efnavörur",
+    "sup": "Kemi",
+    "sku": "fs380awc",
+    "name": "Bensli svört 4,5 × 380mm (100 stk.)",
+    "qty": "2 pokar"
+  },
+  {
+    "id": "e9",
+    "cat": "Efnavörur",
+    "sup": "Kemi",
+    "sku": "851282",
+    "name": "Blár pappír",
+    "qty": "2 Rúllur"
+  },
+  {
+    "id": "e10",
+    "cat": "Efnavörur",
+    "sup": "Kemi",
+    "sku": "5000000376",
+    "name": "Bosch Superfit TO102",
+    "qty": "4 túpur"
+  },
+  {
+    "id": "e11",
+    "cat": "Efnavörur",
+    "sup": "Kemi",
+    "sku": "K2-l346ca",
+    "name": "Brake Caliper Paint",
+    "qty": "5 brúsar"
+  },
+  {
+    "id": "e12",
+    "cat": "Efnavörur",
+    "sup": "Kemi",
+    "sku": "048V60563",
+    "name": "Bremsuhreinsir",
+    "qty": "1 tunna"
+  },
+  {
+    "id": "e13",
+    "cat": "Efnavörur",
+    "sup": "Kemi",
+    "sku": "1900",
+    "name": "Duct tape",
+    "qty": "2 stk."
+  },
+  {
+    "id": "e14",
+    "cat": "Efnavörur",
+    "sup": "Kemi",
+    "sku": "165bk8e",
+    "name": "Eingagrunar tape svart",
+    "qty": "10 rúllur"
+  },
+  {
+    "id": "e15",
+    "cat": "Efnavörur",
+    "sup": "Kemi",
+    "sku": "8919",
+    "name": "Fine lube",
+    "qty": "4 túpur"
+  },
+  {
+    "id": "e16",
+    "cat": "Efnavörur",
+    "sup": "Kemi",
+    "sku": "pn07440",
+    "name": "Flóki arkir brúnn 7440 A-MED 158×224mm",
+    "qty": "1 Kassi"
+  },
+  {
+    "id": "e17",
+    "cat": "Efnavörur",
+    "sup": "Kemi",
+    "sku": "pn61089",
+    "name": "Flóki arkir grænn 96 A-VFN 158×224mm",
+    "qty": "1 Kassi"
+  },
+  {
+    "id": "e18",
+    "cat": "Efnavörur",
+    "sup": "Kemi",
+    "sku": "9102",
+    "name": "Foam Clean",
+    "qty": "5 brúsar"
+  },
+  {
+    "id": "e19",
+    "cat": "Efnavörur",
+    "sup": "Kemi",
+    "sku": "8805ns45gn",
+    "name": "Græna tveggja þátta límið",
+    "qty": "1 túpa"
+  },
+  {
+    "id": "e20",
+    "cat": "Efnavörur",
+    "sup": "Kemi",
+    "sku": "epxdf",
+    "name": "Græna tveggja þátta límið 10:1 stútar",
+    "qty": "10 stk."
+  },
+  {
+    "id": "e21",
+    "cat": "Efnavörur",
+    "sup": "Kemi",
+    "sku": "1987532000",
+    "name": "Herpihólkar Rauðir 1,0mm",
+    "qty": "2 pokar"
+  },
+  {
+    "id": "e22",
+    "cat": "Efnavörur",
+    "sup": "Kemi",
+    "sku": "1987532035",
+    "name": "Herpihólkar Glært 0,5mm",
+    "qty": "2 pokar"
+  },
+  {
+    "id": "e23",
+    "cat": "Efnavörur",
+    "sup": "Kemi",
+    "sku": "b504",
+    "name": "Ísaprópanól IPA99",
+    "qty": "5 brúsar"
+  },
+  {
+    "id": "e24",
+    "cat": "Efnavörur",
+    "sup": "Kemi",
+    "sku": "994-702-0012",
+    "name": "Meg-A-Loose",
+    "qty": "5 brúsar"
+  },
+  {
+    "id": "e25",
+    "cat": "Efnavörur",
+    "sup": "Kemi",
+    "sku": "phs-lr3a-aa",
+    "name": "Rafhlöður AA",
+    "qty": "40 stk."
+  },
+  {
+    "id": "e26",
+    "cat": "Efnavörur",
+    "sup": "Kemi",
+    "sku": "phs-lr3a-aaa",
+    "name": "Rafhlöður AAA",
+    "qty": "40 stk."
+  },
+  {
+    "id": "e27",
+    "cat": "Efnavörur",
+    "sup": "Kemi",
+    "sku": "k6331",
+    "name": "Sílikon sprey",
+    "qty": "5 brúsar"
+  },
+  {
+    "id": "e28",
+    "cat": "Efnavörur",
+    "sup": "Kemi",
+    "sku": "pn18364",
+    "name": "Slípiskífa skrúfuð – Davíð odson",
+    "qty": "1 kassi"
+  },
+  {
+    "id": "e29",
+    "cat": "Efnavörur",
+    "sup": "Kemi",
+    "sku": "pn05523",
+    "name": "Slípiskífa skrúfuð – Ullarskífa Fine",
+    "qty": "1 kassi (50stk)"
+  },
+  {
+    "id": "e30",
+    "cat": "Efnavörur",
+    "sup": "Kemi",
+    "sku": "pn07481",
+    "name": "Slípiskífa skrúfuð – Ullarskífa medium",
+    "qty": "1 kassi (50stk)"
+  },
+  {
+    "id": "e31",
+    "cat": "Efnavörur",
+    "sup": "Kemi",
+    "sku": "pn27717",
+    "name": "Slípiskífa skrúfuð – Þunnur 80pappa",
+    "qty": "1 kassi"
+  },
+  {
+    "id": "e32",
+    "cat": "Efnavörur",
+    "sup": "Kemi",
+    "sku": "w125",
+    "name": "Snertuhreinsir K2 Contact Spray",
+    "qty": "3 brúsar"
+  },
+  {
+    "id": "e33",
+    "cat": "Efnavörur",
+    "sup": "Kemi",
+    "sku": "04056250050",
+    "name": "Svarta tveggja þátta límið",
+    "qty": "1 túpa"
+  },
+  {
+    "id": "e34",
+    "cat": "Efnavörur",
+    "sup": "Kemi",
+    "sku": "04056300050",
+    "name": "Svarta tveggja þátta límið 1:1 stútar",
+    "qty": "2 pokar"
+  },
+  {
+    "id": "e35",
+    "cat": "Efnavörur",
+    "sup": "Kemi",
+    "sku": "8518",
+    "name": "TF Lube",
+    "qty": "5 brúsar"
+  },
+  {
+    "id": "e36",
+    "cat": "Efnavörur",
+    "sup": "Kemi",
+    "sku": "b116",
+    "name": "Tveggja þátta epoxý lím K2 Metal Bond",
+    "qty": "1 pk."
+  },
+  {
+    "id": "e37",
+    "cat": "Efnavörur",
+    "sup": "Kemi",
+    "sku": "660070",
+    "name": "Vélaklútar (tuskur) 10 Kg",
+    "qty": "1 poki"
+  },
+  {
+    "id": "e38",
+    "cat": "Efnavörur",
+    "sup": "Kemi",
+    "sku": "wg500s-8",
+    "name": "Wonder Grip WG-500B Flex M (8)",
+    "qty": "2 Stk"
+  },
+  {
+    "id": "e39",
+    "cat": "Efnavörur",
+    "sup": "Kemi",
+    "sku": "WG260G-9",
+    "name": "Wonder Grip® WG-310HY L (9)",
+    "qty": "1 poki"
+  },
+  {
+    "id": "e40",
+    "cat": "Efnavörur",
+    "sup": "Kemi",
+    "sku": "WG260G-10",
+    "name": "Wonder Grip® WG-310HY XL (10)",
+    "qty": "1 poki"
+  },
+  {
+    "id": "e41",
+    "cat": "Efnavörur",
+    "sup": "Kemi",
+    "sku": "WG260G-11",
+    "name": "Wonder Grip® WG-310HY XXL (11)",
+    "qty": "1 poki"
+  },
+  {
+    "id": "e42",
+    "cat": "Efnavörur",
+    "sup": "Kemi",
+    "sku": "S671.090.312",
+    "name": "ZF olían",
+    "qty": "1 tunna"
+  },
+  {
+    "id": "e43",
+    "cat": "Efnavörur",
+    "sup": "Kemi",
+    "sku": "l352",
+    "name": "Zinc + Ál sprey",
+    "qty": "5 brúsar"
+  },
+  {
+    "id": "e44",
+    "cat": "Efnavörur",
+    "sup": "Kemi",
+    "sku": "1018SP",
+    "name": "Handþvottakrem",
+    "qty": "2 Pokar"
+  },
+  {
+    "id": "e45",
+    "cat": "Efnavörur",
+    "sup": "Kemi",
+    "sku": "APPG105040",
+    "name": "Uppsogsmottur",
+    "qty": "1 kassi"
+  },
+  {
+    "id": "e46",
+    "cat": "Efnavörur",
+    "sup": "Tandur",
+    "sku": "634901",
+    "name": "Gúmmí hanskar Nitril 50PLUS Small",
+    "qty": "1 kassi"
+  },
+  {
+    "id": "e47",
+    "cat": "Efnavörur",
+    "sup": "Tandur",
+    "sku": "634903",
+    "name": "Gúmmí hanskar Nitril 50PLUS Large",
+    "qty": "1 kassi"
+  },
+  {
+    "id": "e48",
+    "cat": "Efnavörur",
+    "sup": "Tandur",
+    "sku": "634902",
+    "name": "Gúmmí hanskar Nitril 50PLUS Medium",
+    "qty": "1 kassi"
+  },
+  {
+    "id": "e49",
+    "cat": "Efnavörur",
+    "sup": "Tandur",
+    "sku": "634904",
+    "name": "Gúmmí hanskar Nitril 50PLUS XL",
+    "qty": "1 kassi"
+  },
+  {
+    "id": "e50",
+    "cat": "Efnavörur",
+    "sup": "Tandur",
+    "sku": "304408L",
+    "name": "Latsex hanskar L",
+    "qty": "5 pakkar"
+  },
+  {
+    "id": "e51",
+    "cat": "Efnavörur",
+    "sup": "Tandur",
+    "sku": "g",
+    "name": "Planta T55 sápa fyrir skúringarvél",
+    "qty": "3 Brúsar"
+  },
+  {
+    "id": "e52",
+    "cat": "Efnavörur",
+    "sup": "Wurth",
+    "sku": "",
+    "name": "RTV silicon",
+    "qty": "6 stk."
+  },
+  {
+    "id": "p1",
+    "cat": "Perur",
+    "sup": "Bosch",
+    "sku": "1987302905",
+    "name": "D1S – Aðalljós",
+    "qty": "1 pk."
+  },
+  {
+    "id": "p2",
+    "cat": "Perur",
+    "sup": "Bosch",
+    "sku": "1987302904",
+    "name": "D2S – Aðalljós",
+    "qty": "1 pk."
+  },
+  {
+    "id": "p3",
+    "cat": "Perur",
+    "sup": "Bosch",
+    "sku": "1987302907",
+    "name": "D3S – Aðalljós",
+    "qty": "1 pk."
+  },
+  {
+    "id": "p4",
+    "cat": "Perur",
+    "sup": "Bosch",
+    "sku": "1987302807",
+    "name": "HB3 – Aðalljós",
+    "qty": "1 pk."
+  },
+  {
+    "id": "p5",
+    "cat": "Perur",
+    "sup": "Bosch",
+    "sku": "1987302808",
+    "name": "HB4 – Aðalljós",
+    "qty": "1 pk."
+  },
+  {
+    "id": "p6",
+    "cat": "Perur",
+    "sup": "Bosch",
+    "sku": "1987302078",
+    "name": "H7 – Aðalljós",
+    "qty": "1 pk."
+  },
+  {
+    "id": "p7",
+    "cat": "Perur",
+    "sup": "Bosch",
+    "sku": "1987302026",
+    "name": "HIR2 – Aðalljós",
+    "qty": "1 pk."
+  },
+  {
+    "id": "p8",
+    "cat": "Perur",
+    "sup": "Bosch",
+    "sku": "1987302806",
+    "name": "H11 – Aðalljós",
+    "qty": "1 pk."
+  },
+  {
+    "id": "p9",
+    "cat": "Perur",
+    "sup": "Bosch",
+    "sku": "1987302805",
+    "name": "H8 – Aðalljós",
+    "qty": "1 pk."
+  },
+  {
+    "id": "p10",
+    "cat": "Perur",
+    "sup": "Bosch",
+    "sku": "1987302802",
+    "name": "H3 – Aðalljós",
+    "qty": "1 pk."
+  },
+  {
+    "id": "p11",
+    "cat": "Perur",
+    "sup": "Bosch",
+    "sku": "1987302801",
+    "name": "H1 – Aðalljós",
+    "qty": "1 pk."
+  },
+  {
+    "id": "p12",
+    "cat": "Perur",
+    "sup": "Bosch",
+    "sku": "1987302803",
+    "name": "H4 – Aðalljós",
+    "qty": "1 pk."
+  },
+  {
+    "id": "p13",
+    "cat": "Perur",
+    "sup": "Philips",
+    "sku": "12580c1",
+    "name": "H15 – Aðalljós",
+    "qty": "1 pk."
+  },
+  {
+    "id": "p14",
+    "cat": "Perur",
+    "sup": "Bosch",
+    "sku": "1987302264",
+    "name": "H21W",
+    "qty": "1 pk."
+  },
+  {
+    "id": "p15",
+    "cat": "Perur",
+    "sup": "Bosch",
+    "sku": "1987302810",
+    "name": "C5W – Pulsa",
+    "qty": "1 pk."
+  },
+  {
+    "id": "p16",
+    "cat": "Perur",
+    "sup": "Bosch",
+    "sku": "1987302811",
+    "name": "P21W",
+    "qty": "1 pk."
+  },
+  {
+    "id": "p17",
+    "cat": "Perur",
+    "sup": "Bosch",
+    "sku": "1987302812",
+    "name": "PY21W – Stefnuljós",
+    "qty": "1 pk."
+  },
+  {
+    "id": "p18",
+    "cat": "Perur",
+    "sup": "Bosch",
+    "sku": "1987302813",
+    "name": "P21/4W",
+    "qty": "1 pk."
+  },
+  {
+    "id": "p19",
+    "cat": "Perur",
+    "sup": "Bosch",
+    "sku": "1987302814",
+    "name": "P21/5W",
+    "qty": "1 pk."
+  },
+  {
+    "id": "p20",
+    "cat": "Perur",
+    "sup": "Bosch",
+    "sku": "1987302815",
+    "name": "R5W",
+    "qty": "1 pk."
+  },
+  {
+    "id": "p21",
+    "cat": "Perur",
+    "sup": "Bosch",
+    "sku": "1987302816",
+    "name": "R10W",
+    "qty": "1 pk."
+  },
+  {
+    "id": "p22",
+    "cat": "Perur",
+    "sup": "Bosch",
+    "sku": "1987302817",
+    "name": "T4W",
+    "qty": "1 pk."
+  },
+  {
+    "id": "p23",
+    "cat": "Perur",
+    "sup": "Bosch",
+    "sku": "1987302819",
+    "name": "W5W – Stöðuljósin",
+    "qty": "1 pk."
+  },
+  {
+    "id": "p24",
+    "cat": "Perur",
+    "sup": "Bosch",
+    "sku": "1987302820",
+    "name": "WY5W",
+    "qty": "1 pk."
+  },
+  {
+    "id": "p25",
+    "cat": "Perur",
+    "sup": "Bosch",
+    "sku": "1987302821",
+    "name": "W16W – Stungu",
+    "qty": "1 pk."
+  },
+  {
+    "id": "p26",
+    "cat": "Perur",
+    "sup": "Bosch",
+    "sku": "1987302822",
+    "name": "W21W – Stungu",
+    "qty": "1 pk."
+  },
+  {
+    "id": "p27",
+    "cat": "Perur",
+    "sup": "Bosch",
+    "sku": "1987302823",
+    "name": "W21/5W – Stungu",
+    "qty": "1 pk."
+  },
+  {
+    "id": "p28",
+    "cat": "Perur",
+    "sup": "Bosch",
+    "sku": "1987302824",
+    "name": "12V 1.2W",
+    "qty": "1 pk."
+  },
+  {
+    "id": "p29",
+    "cat": "Perur",
+    "sup": "Bosch",
+    "sku": "1987302825",
+    "name": "12V 10W – Pulsa",
+    "qty": "1 pk."
+  },
+  {
+    "id": "u1781149844250",
+    "name": "Röfl og ves",
+    "sku": "RF67",
+    "sup": "Jákó",
+    "cat": "Efnavörur",
+    "qty": "Slatti í poka"
+  }
 ]
