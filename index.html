@@ -2,531 +2,456 @@
 <html lang="is">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
   <title>Verkstæðið – Efnalager</title>
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔧</text></svg>">
+  <link rel="manifest" href="manifest.json">
+  <link rel="apple-touch-icon" href="icon.svg">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Verkstæðið">
+  <meta name="theme-color" content="#E85D04">
   <link href="https://fonts.googleapis.com/css2?family=Oxanium:wght@500;700&family=DM+Sans:wght@400;500;600&family=Fira+Code&display=swap" rel="stylesheet">
   <style>
     *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
     html,body,#root{height:100%;overflow:hidden;}
     body{background:#0b0b0b;font-family:'DM Sans',-apple-system,sans-serif;color:#efefef;}
-    ::-webkit-scrollbar{width:3px;}
-    ::-webkit-scrollbar-thumb{background:#2a2a2a;border-radius:2px;}
-    .tap{cursor:pointer;transition:opacity .1s,transform .1s;}
-    .tap:active{opacity:.75;transform:scale(.97);}
-    .hscroll{display:flex;gap:6px;overflow-x:auto;padding-bottom:2px;}
-    .hscroll::-webkit-scrollbar{display:none;}
-    input{-webkit-appearance:none;appearance:none;}
-    button{font-family:inherit;}
-    @keyframes up{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:none}}
+    ::-webkit-scrollbar{width:3px;}::-webkit-scrollbar-thumb{background:#2a2a2a;border-radius:2px;}
+    .tap{cursor:pointer;transition:opacity .1s,transform .1s;}.tap:active{opacity:.75;transform:scale(.97);}
+    .hscroll{display:flex;gap:6px;overflow-x:auto;padding-bottom:2px;}.hscroll::-webkit-scrollbar{display:none;}
+    input,textarea{-webkit-appearance:none;appearance:none;}button{font-family:inherit;}
+    @keyframes up{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
     .anim{animation:up .18s ease forwards;}
-    @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
-    .puls{animation:pulse .9s ease infinite;}
+    @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}.puls{animation:pulse .9s ease infinite;}
+    @keyframes slideup{from{transform:translateY(100%)}to{transform:translateY(0)}}
+    .sheet{animation:slideup .26s cubic-bezier(.32,1,.32,1) forwards;}
+    @keyframes spin{to{transform:rotate(360deg)}}.spin{animation:spin .8s linear infinite;}
   </style>
 </head>
 <body>
 <div id="root"></div>
-
 <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
 <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
 <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-
 <script type="text/babel">
-const { useState, useEffect, useMemo, useCallback } = React;
+const {useState,useEffect,useMemo,useCallback,useRef} = React;
 
-// ═══════════════════════════════════════════════════════════════
-//  STILLINGAR — breyttu þessum upplýsingum eftir þörfum
-// ═══════════════════════════════════════════════════════════════
+// ── Config ────────────────────────────────────────────────────
+const REPO          = 'hzak222/PantaAM';
+const JSON_FILE     = 'vorur.json';
+const RAW_URL       = `https://raw.githubusercontent.com/${REPO}/main/${JSON_FILE}`;
+const API_URL       = `https://api.github.com/repos/${REPO}/contents/${JSON_FILE}`;
+const MANAGER_EMAIL = 'atlireynir@gmail.com';
+const DEFAULT_PW    = 'admin123'; // Admin breytir þessu í stillingum
 
-const MANAGER_EMAIL = "atlireynir@gmail.com";   // ← netfangið þitt
+const SUP_EMAILS = {
+  "Jákó":"jako@jako.is","Kemi":"kemi@kemi.is",
+  "Tandur":"Tandur@tandur.is","Wurth":"Benni@wurth.is",
+  "Bosch":"kemi@kemi.is","Philips":"kemi@kemi.is"
+};
+const ALL_SUPS = ['Jákó','Kemi','Tandur','Wurth','Bosch','Philips'];
 
-const SUPPLIER_EMAILS = {
-  "Jákó":    "jako@jako.is",
-  "Kemi":    "kemi@kemi.is",
-  "Tandur":  "Tandur@tandur.is",
-  "Wurth":   "Benni@wurth.is",
-  "Bosch":   "kemi@kemi.is",    // ← Bosch perur pantaðar í gegnum Kemi
-  "Philips": "kemi@kemi.is",
+// ── Hjálp ──────────────────────────────────────────────────────
+const norm = s => (s||'').toLowerCase()
+  .replace(/[áä]/g,'a').replace(/[éê]/g,'e').replace(/[íî]/g,'i')
+  .replace(/[óö]/g,'o').replace(/[úü]/g,'u').replace(/ý/g,'y')
+  .replace(/ð/g,'d').replace(/þ/g,'th').replace(/æ/g,'ae');
+const hits = (item,q) => { if(!q) return true; return norm(q).split(/\s+/).filter(Boolean).every(w=>norm(`${item.name} ${item.sku} ${item.sup}`).includes(w)); };
+const grp  = (arr,key) => arr.reduce((g,x)=>{(g[x[key]]=g[x[key]]||[]).push(x);return g;},{});
+const buildBody = (items,supName) => {
+  const dt = new Date().toLocaleDateString('is-IS');
+  let b = supName ? 'Hæ,\n\nVið viljum panta eftirfarandi:\n\n' : `Pöntunaryfirlit – ${dt}\n\n`;
+  Object.entries(grp(items,'sup')).forEach(([s,its])=>{
+    if(!supName) b+=`── ${s} ──\n`;
+    its.forEach(i=>{b+=`• ${i.name}`;if(i.sku) b+=` (VNR: ${i.sku})`;b+=` — ${i.qty}\n`;});
+    b+='\n';
+  });
+  return b+(supName?'\nKveðja,\nVerkstæðið':'\nSent frá Verkstæðinu');
 };
 
-// ═══════════════════════════════════════════════════════════════
-//  VÖRULISTI
-//
-//  ► TIL AÐ BÆTA VIÐ vöru — afritaðu eina línu og breyttu:
-//      id   — einstakt auðkenni, t.d. "e53" (hækktu töluna)
-//      cat  — "Efnavörur"  eða  "Perur"
-//      sup  — birgjaheiti (Jákó / Kemi / Tandur / Wurth ...)
-//      sku  — vörunúmer (skrifaðu "" ef ekkert númer)
-//      name — nafn vörunnar
-//      qty  — pöntunarmagn
-//
-//  ► TIL AÐ EYÐA vöru — eyðtu línunni
-//  ► TIL AÐ BREYTA vöru — breyttu viðeigandi reit
-//
-//  ► TIL AÐ BÆTA VIÐ NÝJAN BIRGI:
-//      1. Bættu netfangi við SUPPLIER_EMAILS hér að ofan
-//      2. Skrifaðu birgjanafnið nákvæmlega eins í  sup  reitnum
-// ═══════════════════════════════════════════════════════════════
+// ── SVG tákn ──────────────────────────────────────────────────
+const Ic = ({s=16,c='currentColor',style:st,cls,children}) =>
+  <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={st} className={cls}>{children}</svg>;
+const ISearch  = ({s,c})=><Ic s={s} c={c}><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></Ic>;
+const IMic     = ({s,c,cls})=><Ic s={s} c={c} cls={cls}><path d="M12 2a3 3 0 0 1 3 3v7a3 3 0 0 1-6 0V5a3 3 0 0 1 3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></Ic>;
+const ICart    = ({s,c})=><Ic s={s} c={c}><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></Ic>;
+const IBox     = ({s,c})=><Ic s={s} c={c}><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></Ic>;
+const IBulb    = ({s,c})=><Ic s={s} c={c}><line x1="9" y1="21" x2="15" y2="21"/><line x1="9" y1="18" x2="15" y2="18"/><path d="M12 3a6 6 0 0 1 6 6c0 2.2-1.2 4.1-3 5.2V16H9v-1.8C7.2 13.1 6 11.2 6 9a6 6 0 0 1 6-6z"/></Ic>;
+const ICheck   = ({s,c})=><Ic s={s} c={c}><polyline points="20 6 9 17 4 12"/></Ic>;
+const IX       = ({s,c})=><Ic s={s} c={c}><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></Ic>;
+const IMail    = ({s,c})=><Ic s={s} c={c}><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></Ic>;
+const ITrash   = ({s,c})=><Ic s={s} c={c}><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></Ic>;
+const IZap     = ({s,c})=><Ic s={s} c={c}><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></Ic>;
+const ICopy    = ({s,c})=><Ic s={s} c={c}><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></Ic>;
+const IShare   = ({s,c})=><Ic s={s} c={c}><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></Ic>;
+const ICamera  = ({s,c})=><Ic s={s} c={c}><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></Ic>;
+const IGear    = ({s,c})=><Ic s={s} c={c}><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></Ic>;
+const IPlus    = ({s,c})=><Ic s={s} c={c}><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></Ic>;
+const IRefresh = ({s,c,cls})=><Ic s={s} c={c} cls={cls}><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></Ic>;
+const IUser    = ({s,c})=><Ic s={s} c={c}><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></Ic>;
+const ILock    = ({s,c})=><Ic s={s} c={c}><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></Ic>;
+const IKey     = ({s,c})=><Ic s={s} c={c}><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></Ic>;
 
-const ALL_ITEMS = [
+const C = {bg:'#0b0b0b',s1:'#141414',s2:'#1c1c1c',bd:'#272727',acc:'#E85D04',txt:'#efefef',mut:'#666',grn:'#22c55e',red:'#ef4444'};
 
-  // ── Jákó ────────────────────────────────────────────────────
-  { id:"e1",  cat:"Efnavörur", sup:"Jákó",    sku:"",              name:"Hanskar í sandkassa",                        qty:"1 Par" },
-  { id:"e2",  cat:"Efnavörur", sup:"Jákó",    sku:"",              name:"Jákó 5000",                                  qty:"3 Brúsar" },
-  { id:"e3",  cat:"Efnavörur", sup:"Jákó",    sku:"",              name:"Sandi í sandkassann (Strahlglasperlen 200-300)", qty:"3 Pokar" },
-
-  // ── Kemi ────────────────────────────────────────────────────
-  { id:"e4",  cat:"Efnavörur", sup:"Kemi",    sku:"8822",          name:"3M – Grímur með ventli",                     qty:"1 pk. (10stk.)" },
-  { id:"e5",  cat:"Efnavörur", sup:"Kemi",    sku:"fs135awc",      name:"Bensli svört 2,5 × 135mm (100 stk.)",        qty:"2 pokar" },
-  { id:"e6",  cat:"Efnavörur", sup:"Kemi",    sku:"fs200awc",      name:"Bensli svört 4,5 × 200mm (100 stk.)",        qty:"2 pokar" },
-  { id:"e7",  cat:"Efnavörur", sup:"Kemi",    sku:"fs280awc",      name:"Bensli svört 4,5 × 280mm (100 stk.)",        qty:"2 pokar" },
-  { id:"e8",  cat:"Efnavörur", sup:"Kemi",    sku:"fs380awc",      name:"Bensli svört 4,5 × 380mm (100 stk.)",        qty:"2 pokar" },
-  { id:"e9",  cat:"Efnavörur", sup:"Kemi",    sku:"851282",        name:"Blár pappír",                                qty:"2 Rúllur" },
-  { id:"e10", cat:"Efnavörur", sup:"Kemi",    sku:"5000000376",    name:"Bosch Superfit TO102",                       qty:"4 túpur" },
-  { id:"e11", cat:"Efnavörur", sup:"Kemi",    sku:"K2-l346ca",     name:"Brake Caliper Paint",                        qty:"5 brúsar" },
-  { id:"e12", cat:"Efnavörur", sup:"Kemi",    sku:"048V60563",     name:"Bremsuhreinsir",                             qty:"1 tunna" },
-  { id:"e13", cat:"Efnavörur", sup:"Kemi",    sku:"1900",          name:"Duct tape",                                  qty:"2 stk." },
-  { id:"e14", cat:"Efnavörur", sup:"Kemi",    sku:"165bk8e",       name:"Eingagrunar tape svart",                     qty:"10 rúllur" },
-  { id:"e15", cat:"Efnavörur", sup:"Kemi",    sku:"8919",          name:"Fine lube",                                  qty:"4 túpur" },
-  { id:"e16", cat:"Efnavörur", sup:"Kemi",    sku:"pn07440",       name:"Flóki arkir brúnn 7440 A-MED 158×224mm",    qty:"1 Kassi" },
-  { id:"e17", cat:"Efnavörur", sup:"Kemi",    sku:"pn61089",       name:"Flóki arkir grænn 96 A-VFN 158×224mm",      qty:"1 Kassi" },
-  { id:"e18", cat:"Efnavörur", sup:"Kemi",    sku:"9102",          name:"Foam Clean",                                 qty:"5 brúsar" },
-  { id:"e19", cat:"Efnavörur", sup:"Kemi",    sku:"8805ns45gn",    name:"Græna tveggja þátta límið",                  qty:"1 túpa" },
-  { id:"e20", cat:"Efnavörur", sup:"Kemi",    sku:"epxdf",         name:"Græna tveggja þátta límið 10:1 stútar",      qty:"10 stk." },
-  { id:"e21", cat:"Efnavörur", sup:"Kemi",    sku:"1987532000",    name:"Herpihólkar Rauðir 1,0mm",                   qty:"2 pokar" },
-  { id:"e22", cat:"Efnavörur", sup:"Kemi",    sku:"1987532035",    name:"Herpihólkar Glært 0,5mm",                    qty:"2 pokar" },
-  { id:"e23", cat:"Efnavörur", sup:"Kemi",    sku:"b504",          name:"Ísaprópanól IPA99",                          qty:"5 brúsar" },
-  { id:"e24", cat:"Efnavörur", sup:"Kemi",    sku:"994-702-0012",  name:"Meg-A-Loose",                                qty:"5 brúsar" },
-  { id:"e25", cat:"Efnavörur", sup:"Kemi",    sku:"phs-lr3a-aa",   name:"Rafhlöður AA",                               qty:"40 stk." },
-  { id:"e26", cat:"Efnavörur", sup:"Kemi",    sku:"phs-lr3a-aaa",  name:"Rafhlöður AAA",                              qty:"40 stk." },
-  { id:"e27", cat:"Efnavörur", sup:"Kemi",    sku:"k6331",         name:"Sílikon sprey",                              qty:"5 brúsar" },
-  { id:"e28", cat:"Efnavörur", sup:"Kemi",    sku:"pn18364",       name:"Slípiskífa skrúfuð – Davíð odson",           qty:"1 kassi" },
-  { id:"e29", cat:"Efnavörur", sup:"Kemi",    sku:"pn05523",       name:"Slípiskífa skrúfuð – Ullarskífa Fine",       qty:"1 kassi (50stk)" },
-  { id:"e30", cat:"Efnavörur", sup:"Kemi",    sku:"pn07481",       name:"Slípiskífa skrúfuð – Ullarskífa medium",     qty:"1 kassi (50stk)" },
-  { id:"e31", cat:"Efnavörur", sup:"Kemi",    sku:"pn27717",       name:"Slípiskífa skrúfuð – Þunnur 80pappa",        qty:"1 kassi" },
-  { id:"e32", cat:"Efnavörur", sup:"Kemi",    sku:"w125",          name:"Snertuhreinsir K2 Contact Spray",            qty:"3 brúsar" },
-  { id:"e33", cat:"Efnavörur", sup:"Kemi",    sku:"04056250050",   name:"Svarta tveggja þátta límið",                 qty:"1 túpa" },
-  { id:"e34", cat:"Efnavörur", sup:"Kemi",    sku:"04056300050",   name:"Svarta tveggja þátta límið 1:1 stútar",      qty:"2 pokar" },
-  { id:"e35", cat:"Efnavörur", sup:"Kemi",    sku:"8518",          name:"TF Lube",                                    qty:"5 brúsar" },
-  { id:"e36", cat:"Efnavörur", sup:"Kemi",    sku:"b116",          name:"Tveggja þátta epoxý lím K2 Metal Bond",      qty:"1 pk." },
-  { id:"e37", cat:"Efnavörur", sup:"Kemi",    sku:"660070",        name:"Vélaklútar (tuskur) 10 Kg",                  qty:"1 poki" },
-  { id:"e38", cat:"Efnavörur", sup:"Kemi",    sku:"wg500s-8",      name:"Wonder Grip WG-500B Flex M (8)",             qty:"2 Stk" },
-  { id:"e39", cat:"Efnavörur", sup:"Kemi",    sku:"WG260G-9",      name:"Wonder Grip® WG-310HY L (9)",                qty:"1 poki" },
-  { id:"e40", cat:"Efnavörur", sup:"Kemi",    sku:"WG260G-10",     name:"Wonder Grip® WG-310HY XL (10)",              qty:"1 poki" },
-  { id:"e41", cat:"Efnavörur", sup:"Kemi",    sku:"WG260G-11",     name:"Wonder Grip® WG-310HY XXL (11)",             qty:"1 poki" },
-  { id:"e42", cat:"Efnavörur", sup:"Kemi",    sku:"S671.090.312",  name:"ZF olían",                                   qty:"1 tunna" },
-  { id:"e43", cat:"Efnavörur", sup:"Kemi",    sku:"l352",          name:"Zinc + Ál sprey",                            qty:"5 brúsar" },
-  { id:"e44", cat:"Efnavörur", sup:"Kemi",    sku:"1018SP",        name:"Handþvottakrem",                             qty:"2 Pokar" },
-  { id:"e45", cat:"Efnavörur", sup:"Kemi",    sku:"APPG105040",    name:"Uppsogsmottur",                              qty:"1 kassi" },
-
-  // ── Tandur ──────────────────────────────────────────────────
-  { id:"e46", cat:"Efnavörur", sup:"Tandur",  sku:"634901",        name:"Gúmmí hanskar Nitril 50PLUS Small",          qty:"1 kassi" },
-  { id:"e47", cat:"Efnavörur", sup:"Tandur",  sku:"634903",        name:"Gúmmí hanskar Nitril 50PLUS Large",          qty:"1 kassi" },
-  { id:"e48", cat:"Efnavörur", sup:"Tandur",  sku:"634902",        name:"Gúmmí hanskar Nitril 50PLUS Medium",         qty:"1 kassi" },
-  { id:"e49", cat:"Efnavörur", sup:"Tandur",  sku:"634904",        name:"Gúmmí hanskar Nitril 50PLUS XL",             qty:"1 kassi" },
-  { id:"e50", cat:"Efnavörur", sup:"Tandur",  sku:"304408L",       name:"Latsex hanskar L",                           qty:"5 pakkar" },
-  { id:"e51", cat:"Efnavörur", sup:"Tandur",  sku:"g",             name:"Planta T55 sápa fyrir skúringarvél",          qty:"3 Brúsar" },
-
-  // ── Wurth ───────────────────────────────────────────────────
-  { id:"e52", cat:"Efnavörur", sup:"Wurth",   sku:"",              name:"RTV silicon",                                qty:"6 stk." },
-
-  // ── Perur · Bosch – Aðalljós ────────────────────────────────
-  { id:"p1",  cat:"Perur",     sup:"Bosch",   sku:"1987302905",    name:"D1S – Aðalljós",                             qty:"1 pk." },
-  { id:"p2",  cat:"Perur",     sup:"Bosch",   sku:"1987302904",    name:"D2S – Aðalljós",                             qty:"1 pk." },
-  { id:"p3",  cat:"Perur",     sup:"Bosch",   sku:"1987302907",    name:"D3S – Aðalljós",                             qty:"1 pk." },
-  { id:"p4",  cat:"Perur",     sup:"Bosch",   sku:"1987302807",    name:"HB3 – Aðalljós",                             qty:"1 pk." },
-  { id:"p5",  cat:"Perur",     sup:"Bosch",   sku:"1987302808",    name:"HB4 – Aðalljós",                             qty:"1 pk." },
-  { id:"p6",  cat:"Perur",     sup:"Bosch",   sku:"1987302078",    name:"H7 – Aðalljós",                              qty:"1 pk." },
-  { id:"p7",  cat:"Perur",     sup:"Bosch",   sku:"1987302026",    name:"HIR2 – Aðalljós",                            qty:"1 pk." },
-  { id:"p8",  cat:"Perur",     sup:"Bosch",   sku:"1987302806",    name:"H11 – Aðalljós",                             qty:"1 pk." },
-  { id:"p9",  cat:"Perur",     sup:"Bosch",   sku:"1987302805",    name:"H8 – Aðalljós",                              qty:"1 pk." },
-  { id:"p10", cat:"Perur",     sup:"Bosch",   sku:"1987302802",    name:"H3 – Aðalljós",                              qty:"1 pk." },
-  { id:"p11", cat:"Perur",     sup:"Bosch",   sku:"1987302801",    name:"H1 – Aðalljós",                              qty:"1 pk." },
-  { id:"p12", cat:"Perur",     sup:"Bosch",   sku:"1987302803",    name:"H4 – Aðalljós",                              qty:"1 pk." },
-
-  // ── Perur · Philips ─────────────────────────────────────────
-  { id:"p13", cat:"Perur",     sup:"Philips", sku:"12580c1",       name:"H15 – Aðalljós",                             qty:"1 pk." },
-
-  // ── Perur · Bosch – Aðrar perur ─────────────────────────────
-  { id:"p14", cat:"Perur",     sup:"Bosch",   sku:"1987302264",    name:"H21W",                                       qty:"1 pk." },
-  { id:"p15", cat:"Perur",     sup:"Bosch",   sku:"1987302810",    name:"C5W – Pulsa",                                qty:"1 pk." },
-  { id:"p16", cat:"Perur",     sup:"Bosch",   sku:"1987302811",    name:"P21W",                                       qty:"1 pk." },
-  { id:"p17", cat:"Perur",     sup:"Bosch",   sku:"1987302812",    name:"PY21W – Stefnuljós",                         qty:"1 pk." },
-  { id:"p18", cat:"Perur",     sup:"Bosch",   sku:"1987302813",    name:"P21/4W",                                     qty:"1 pk." },
-  { id:"p19", cat:"Perur",     sup:"Bosch",   sku:"1987302814",    name:"P21/5W",                                     qty:"1 pk." },
-  { id:"p20", cat:"Perur",     sup:"Bosch",   sku:"1987302815",    name:"R5W",                                        qty:"1 pk." },
-  { id:"p21", cat:"Perur",     sup:"Bosch",   sku:"1987302816",    name:"R10W",                                       qty:"1 pk." },
-  { id:"p22", cat:"Perur",     sup:"Bosch",   sku:"1987302817",    name:"T4W",                                        qty:"1 pk." },
-  { id:"p23", cat:"Perur",     sup:"Bosch",   sku:"1987302819",    name:"W5W – Stöðuljósin",                          qty:"1 pk." },
-  { id:"p24", cat:"Perur",     sup:"Bosch",   sku:"1987302820",    name:"WY5W",                                       qty:"1 pk." },
-  { id:"p25", cat:"Perur",     sup:"Bosch",   sku:"1987302821",    name:"W16W – Stungu",                              qty:"1 pk." },
-  { id:"p26", cat:"Perur",     sup:"Bosch",   sku:"1987302822",    name:"W21W – Stungu",                              qty:"1 pk." },
-  { id:"p27", cat:"Perur",     sup:"Bosch",   sku:"1987302823",    name:"W21/5W – Stungu",                            qty:"1 pk." },
-  { id:"p28", cat:"Perur",     sup:"Bosch",   sku:"1987302824",    name:"12V 1.2W",                                   qty:"1 pk." },
-  { id:"p29", cat:"Perur",     sup:"Bosch",   sku:"1987302825",    name:"12V 10W – Pulsa",                            qty:"1 pk." },
-
-];
-
-// ═══════════════════════════════════════════════════════════════
-//  Hjálparföll
-// ═══════════════════════════════════════════════════════════════
-
-function norm(s) {
-  return (s||"").toLowerCase()
-    .replace(/[áä]/g,"a").replace(/[éê]/g,"e").replace(/[íî]/g,"i")
-    .replace(/[óö]/g,"o").replace(/[úü]/g,"u").replace(/ý/g,"y")
-    .replace(/ð/g,"d").replace(/þ/g,"th").replace(/æ/g,"ae");
-}
-
-function hits(item, q) {
-  if (!q) return true;
-  const words = norm(q).split(/\s+/).filter(Boolean);
-  const hay   = norm(`${item.name} ${item.sku} ${item.sup}`);
-  return words.every(w => hay.includes(w));
-}
-
-function grp(arr, key) {
-  return arr.reduce((g,x) => { (g[x[key]]=g[x[key]]||[]).push(x); return g; }, {});
-}
-
-// ═══════════════════════════════════════════════════════════════
-//  SVG tákn
-// ═══════════════════════════════════════════════════════════════
-
-const Ic = ({ size=16, color="currentColor", style, children }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none"
-       stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={style}>
-    {children}
-  </svg>
+// ── Input component ───────────────────────────────────────────
+const Field = ({label,value,onChange,placeholder,type='text',mono=false,small=false}) => (
+  <div style={{marginBottom:12}}>
+    {label&&<div style={{fontSize:11,color:C.mut,letterSpacing:1,textTransform:'uppercase',marginBottom:4}}>{label}</div>}
+    <input type={type} value={value} onChange={e=>onChange(e.target.value)} placeholder={placeholder}
+      style={{width:'100%',background:C.s2,border:`1px solid ${C.bd}`,borderRadius:8,
+              padding:small?'7px 10px':'10px 12px',color:C.txt,fontSize:small?13:14,
+              fontFamily:mono?'\'Fira Code\',monospace':'inherit',outline:'none'}}/>
+  </div>
 );
 
-const ISearch = ({s,c}) => <Ic size={s} color={c}><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></Ic>;
-const IMic    = ({s,c}) => <Ic size={s} color={c}><path d="M12 2a3 3 0 0 1 3 3v7a3 3 0 0 1-6 0V5a3 3 0 0 1 3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></Ic>;
-const ICart   = ({s,c}) => <Ic size={s} color={c}><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></Ic>;
-const IBox    = ({s,c}) => <Ic size={s} color={c}><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></Ic>;
-const IBulb   = ({s,c}) => <Ic size={s} color={c}><line x1="9" y1="21" x2="15" y2="21"/><line x1="9" y1="18" x2="15" y2="18"/><path d="M12 3a6 6 0 0 1 6 6c0 2.2-1.2 4.1-3 5.2V16H9v-1.8C7.2 13.1 6 11.2 6 9a6 6 0 0 1 6-6z"/></Ic>;
-const ICheck  = ({s,c}) => <Ic size={s} color={c}><polyline points="20 6 9 17 4 12"/></Ic>;
-const IX      = ({s,c}) => <Ic size={s} color={c}><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></Ic>;
-const IMail   = ({s,c}) => <Ic size={s} color={c}><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></Ic>;
-const ITrash  = ({s,c}) => <Ic size={s} color={c}><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></Ic>;
-const IZap    = ({s,c}) => <Ic size={s} color={c}><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></Ic>;
-
-// ═══════════════════════════════════════════════════════════════
-//  Litir
-// ═══════════════════════════════════════════════════════════════
-
-const C = { bg:"#0b0b0b", s1:"#141414", s2:"#1c1c1c", bd:"#272727",
-            acc:"#E85D04", txt:"#efefef", mut:"#666", grn:"#22c55e" };
-
-// ═══════════════════════════════════════════════════════════════
-//  Aðal app
-// ═══════════════════════════════════════════════════════════════
-
+// ── Main App ──────────────────────────────────────────────────
 function App() {
-  const [view,      setView]      = useState("list");
-  const [cat,       setCat]       = useState("Efnavörur");
-  const [query,     setQuery]     = useState("");
-  const [supF,      setSupF]      = useState("");
+  // Core state
+  const [userName,  setUserName]  = useState('');
+  const [nameSet,   setNameSet]   = useState(false);
+  const [isAdmin,   setIsAdmin]   = useState(false);
+  const [items,     setItems]     = useState([]);
+  const [loading,   setLoading]   = useState(true);
+  const [loadErr,   setLoadErr]   = useState(false);
   const [checked,   setChecked]   = useState({});
-  const [listening, setListening] = useState(false);
-  const [toast,     setToast]     = useState(null);
+  const [view,      setView]      = useState('list');
+  const [cat,       setCat]       = useState('Efnavörur');
+  const [query,     setQuery]     = useState('');
+  const [supF,      setSupF]      = useState('');
   const [allCats,   setAllCats]   = useState(false);
+  const [modal,     setModal]     = useState(null);
+  const [toast,     setToast]     = useState(null);
+  const [listening, setListening] = useState(false);
+  const [orderShare,setOrderShare]= useState(null);
 
-  // ── Geymsla ────────────────────────────────────────────────
-  useEffect(() => {
-    try { const s = localStorage.getItem("vrkst-v1"); if(s) setChecked(JSON.parse(s)); } catch {}
-  }, []);
-  useEffect(() => {
-    try { localStorage.setItem("vrkst-v1", JSON.stringify(checked)); } catch {}
-  }, [checked]);
+  // Admin state
+  const [ghToken,   setGhToken]   = useState('');
+  const [pwInput,   setPwInput]   = useState('');
+  const [pwError,   setPwError]   = useState(false);
+  const [newItem,   setNewItem]   = useState({name:'',sku:'',sup:'Kemi',cat:'Efnavörur',qty:''});
+  const [saving,    setSaving]    = useState(false);
+  const [newPw,     setNewPw]     = useState('');
 
-  const showToast = (msg) => { setToast(msg); setTimeout(()=>setToast(null), 2400); };
-  const toggle    = useCallback((id) => setChecked(p => ({...p,[id]:!p[id]})), []);
+  // Photo state
+  const photoRef  = useRef(null);
+  const [photoFile,   setPhotoFile]   = useState(null);
+  const [photoPreview,setPhotoPreview]= useState(null);
+  const [photoDesc,   setPhotoDesc]   = useState('');
 
-  // ── Síun ───────────────────────────────────────────────────
-  const visible   = useMemo(() => {
-    let items = allCats ? ALL_ITEMS : ALL_ITEMS.filter(i=>i.cat===cat);
-    if (supF)  items = items.filter(i=>i.sup===supF);
-    if (query) items = items.filter(i=>hits(i,query));
-    return items;
-  }, [cat,query,supF,allCats]);
+  // ── Init ────────────────────────────────────────────────────
+  useEffect(()=>{
+    const n = localStorage.getItem('vrkst-name');
+    if(n){ setUserName(n); setNameSet(true); }
+    const sv = localStorage.getItem('vrkst-checked');
+    if(sv) setChecked(JSON.parse(sv));
+    const tk = localStorage.getItem('vrkst-token');
+    if(tk) setGhToken(tk);
+    const ca = localStorage.getItem('vrkst-items');
+    if(ca) setItems(JSON.parse(ca));
+    fetchItems();
+  },[]);
 
-  const grouped     = useMemo(() => grp(visible,"sup"), [visible]);
-  const checkedList = useMemo(() => ALL_ITEMS.filter(i=>checked[i.id]), [checked]);
-  const checkedGrp  = useMemo(() => grp(checkedList,"sup"), [checkedList]);
-  const count       = checkedList.length;
-  const suppliers   = useMemo(() => [...new Set(ALL_ITEMS.filter(i=>i.cat===cat).map(i=>i.sup))], [cat]);
+  useEffect(()=>{ try{localStorage.setItem('vrkst-checked',JSON.stringify(checked));}catch{} },[checked]);
 
-  // ── Rödd ───────────────────────────────────────────────────
+  // ── Fetch items ─────────────────────────────────────────────
+  const fetchItems = async () => {
+    setLoading(true); setLoadErr(false);
+    try {
+      const res = await fetch(`${RAW_URL}?t=${Date.now()}`);
+      if(!res.ok) throw new Error();
+      const data = await res.json();
+      setItems(data);
+      localStorage.setItem('vrkst-items',JSON.stringify(data));
+    } catch {
+      if(!localStorage.getItem('vrkst-items')) setLoadErr(true);
+    } finally { setLoading(false); }
+  };
+
+  // ── Add item via GitHub API ──────────────────────────────────
+  const saveItem = async () => {
+    if(!newItem.name.trim()||!newItem.qty.trim()) return showToast('Fylltu út nafn og magn');
+    if(!ghToken) return showToast('Þú þarft að setja inn GitHub token í stillingum');
+    setSaving(true);
+    try {
+      const res   = await fetch(API_URL,{headers:{Authorization:`token ${ghToken}`,Accept:'application/vnd.github.v3+json'}});
+      const data  = await res.json();
+      if(!res.ok) throw new Error(data.message||'API villa');
+      const updated = [...items,{id:`u${Date.now()}`,...newItem}];
+      const content = btoa(unescape(encodeURIComponent(JSON.stringify(updated,null,2))));
+      const put = await fetch(API_URL,{method:'PUT',headers:{Authorization:`token ${ghToken}`,'Content-Type':'application/json'},
+        body:JSON.stringify({message:`Bætt við: ${newItem.name}`,content,sha:data.sha})});
+      if(!put.ok) throw new Error('commit villa');
+      setItems(updated);
+      localStorage.setItem('vrkst-items',JSON.stringify(updated));
+      setNewItem({name:'',sku:'',sup:'Kemi',cat:'Efnavörur',qty:''});
+      setModal(null);
+      showToast('✓ Vöru bætt við lista!');
+    } catch(e){ showToast(`Villa: ${e.message}`); }
+    finally { setSaving(false); }
+  };
+
+  // ── Admin login ──────────────────────────────────────────────
+  const loginAdmin = () => {
+    const stored = localStorage.getItem('vrkst-pw') || DEFAULT_PW;
+    if(pwInput===stored){ setIsAdmin(true); setPwError(false); setPwInput(''); }
+    else { setPwError(true); }
+  };
+
+  // ── Toast ────────────────────────────────────────────────────
+  const showToast = msg => { setToast(msg); setTimeout(()=>setToast(null),2600); };
+
+  // ── Toggle item ──────────────────────────────────────────────
+  const toggle = useCallback(id=>setChecked(p=>({...p,[id]:!p[id]})),[]);
+
+  // ── Voice ────────────────────────────────────────────────────
   const startVoice = () => {
-    const SR = window.SpeechRecognition||window.webkitSpeechRecognition;
-    if (!SR) { showToast("Hljóðþekking er ekki studd"); return; }
-    const r = new SR(); r.lang="is-IS";
-    r.onstart  = () => setListening(true);
-    r.onend    = () => setListening(false);
-    r.onerror  = () => setListening(false);
-    r.onresult = e => { setQuery(e.results[0][0].transcript); setAllCats(false); };
-    r.start();
+    const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+    if(!SR){showToast('Hljóðþekking er ekki studd');return;}
+    const r=new SR();r.lang='is-IS';
+    r.onstart=()=>setListening(true);r.onend=()=>setListening(false);r.onerror=()=>setListening(false);
+    r.onresult=e=>{setQuery(e.results[0][0].transcript);setAllCats(false);};r.start();
   };
 
-  const crossSearch = () => { if(!query) return; setAllCats(true); setSupF(""); showToast("Leitar í öllum flokkum..."); };
-  const clearSearch = () => { setQuery(""); setSupF(""); setAllCats(false); };
+  // ── Photo request ────────────────────────────────────────────
+  const onPhotoChange = e => {
+    const f=e.target.files[0]; if(!f) return;
+    setPhotoFile(f);
+    setPhotoPreview(URL.createObjectURL(f));
+    setModal('photo');
+  };
 
-  // ── Tölvupóstur ─────────────────────────────────────────────
-  const sendEmail = (supName=null) => {
-    const items = supName ? checkedList.filter(i=>i.sup===supName) : checkedList;
-    if (!items.length) return;
-    const to  = supName ? (SUPPLIER_EMAILS[supName]||MANAGER_EMAIL) : MANAGER_EMAIL;
-    const dt  = new Date().toLocaleDateString("is-IS");
-    const sub = encodeURIComponent(supName
-      ? `Pöntun ${dt} – ${items.length} vörur`
-      : `Pöntunaryfirlit ${dt} – ${count} vörur`);
-    let body  = supName ? "Hæ,\n\nVið viljum panta eftirfarandi:\n\n"
-                        : `Pöntunaryfirlit – ${dt}\n\n`;
-    const gs = grp(items,"sup");
-    Object.entries(gs).forEach(([s,its]) => {
-      if(!supName) body+=`── ${s} ──\n`;
-      its.forEach(i => { body+=`• ${i.name}`; if(i.sku) body+=` (VNR: ${i.sku})`; body+=` — ${i.qty}\n`; });
-      body+="\n";
+  const sendPhotoRequest = async () => {
+    const msg = `📦 Tillaga að nýrri vöru\nSent af: ${userName}\n\n${photoDesc||'(engin lýsing)'}`;
+    if(navigator.share){
+      try {
+        const shareData = {title:'Tillaga að vöru',text:msg};
+        if(photoFile&&navigator.canShare&&navigator.canShare({files:[photoFile]}))
+          shareData.files = [photoFile];
+        await navigator.share(shareData);
+        showToast('Tillaga send!');
+        resetPhoto();
+        return;
+      } catch(e){ if(e.name==='AbortError') return; }
+    }
+    window.open(`mailto:${MANAGER_EMAIL}?subject=${encodeURIComponent('Tillaga að nýrri vöru')}&body=${encodeURIComponent(msg)}`);
+    showToast('Tölvupóstur opnaður');
+    resetPhoto();
+  };
+
+  const resetPhoto = () => {
+    setPhotoFile(null); setPhotoPreview(null); setPhotoDesc(''); setModal(null);
+    if(photoRef.current) photoRef.current.value='';
+  };
+
+  // ── Order share ──────────────────────────────────────────────
+  const openShare = (supName=null) => {
+    const its = supName?checkedList.filter(i=>i.sup===supName):checkedList;
+    if(!its.length) return;
+    const dt=new Date().toLocaleDateString('is-IS');
+    setOrderShare({
+      to:supName?(SUP_EMAILS[supName]||MANAGER_EMAIL):MANAGER_EMAIL,
+      subject:supName?`Pöntun ${dt} – ${its.length} vörur`:`Pöntunaryfirlit ${dt} – ${count} vörur`,
+      body:buildBody(its,supName)
     });
-    body += supName ? "\nKveðja,\nVerkstæðið" : "\nSent frá Verkstæðinu";
-    window.location.href = `mailto:${to}?subject=${sub}&body=${encodeURIComponent(body)}`;
   };
+
+  // ── Derived ─────────────────────────────────────────────────
+  const visible = useMemo(()=>{
+    let it = allCats?items:items.filter(i=>i.cat===cat);
+    if(supF)  it=it.filter(i=>i.sup===supF);
+    if(query) it=it.filter(i=>hits(i,query));
+    return it;
+  },[items,cat,query,supF,allCats]);
+
+  const grouped     = useMemo(()=>grp(visible,'sup'),[visible]);
+  const checkedList = useMemo(()=>items.filter(i=>checked[i.id]),[items,checked]);
+  const checkedGrp  = useMemo(()=>grp(checkedList,'sup'),[checkedList]);
+  const count       = checkedList.length;
+  const suppliers   = useMemo(()=>[...new Set(items.filter(i=>i.cat===cat).map(i=>i.sup))],[items,cat]);
 
   const Divider = ({label}) => (
-    <div style={{display:"flex",alignItems:"center",padding:"8px 16px 2px",gap:8}}>
+    <div style={{display:'flex',alignItems:'center',padding:'8px 16px 2px',gap:8}}>
       <div style={{height:1,flex:1,background:C.bd}}/>
-      <span style={{fontSize:10,color:C.mut,letterSpacing:2,textTransform:"uppercase",fontWeight:600}}>{label}</span>
+      <span style={{fontSize:10,color:C.mut,letterSpacing:2,textTransform:'uppercase',fontWeight:600}}>{label}</span>
       <div style={{height:1,flex:1,background:C.bd}}/>
     </div>
   );
 
-  // ── Útlitið ─────────────────────────────────────────────────
+  // ────────────────────────────────────────────────────────────
+  //  NAME SETUP SCREEN
+  // ────────────────────────────────────────────────────────────
+  if(!nameSet) return (
+    <div style={{background:C.bg,height:'100%',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',padding:32}}>
+      <div style={{fontFamily:'Oxanium,sans-serif',fontSize:32,fontWeight:700,color:C.acc,marginBottom:6}}>VERKSTÆÐIÐ</div>
+      <div style={{fontSize:12,color:C.mut,letterSpacing:2,textTransform:'uppercase',marginBottom:48}}>Efnalager · Pöntunarkerfi</div>
+      <div style={{width:'100%',maxWidth:320}}>
+        <div style={{fontSize:18,fontWeight:600,marginBottom:6}}>Hvað heitirðu?</div>
+        <div style={{fontSize:13,color:C.mut,marginBottom:20}}>Nafnið þitt birtist þegar þú sendir inn tillögu</div>
+        <input
+          value={userName} onChange={e=>setUserName(e.target.value)}
+          onKeyDown={e=>{ if(e.key==='Enter'&&userName.trim()){ localStorage.setItem('vrkst-name',userName.trim()); setNameSet(true); }}}
+          placeholder="Nafn þitt..."
+          style={{width:'100%',background:C.s1,border:`1px solid ${C.bd}`,borderRadius:12,padding:'14px 16px',color:C.txt,fontSize:16,outline:'none',fontFamily:'inherit',marginBottom:12}}
+          autoFocus
+        />
+        <button onClick={()=>{ if(!userName.trim()) return; localStorage.setItem('vrkst-name',userName.trim()); setNameSet(true); }}
+          className="tap" style={{width:'100%',padding:14,borderRadius:12,border:'none',background:userName.trim()?C.acc:'#222',color:'#fff',fontSize:15,fontWeight:600,cursor:'pointer'}}>
+          Áfram →
+        </button>
+      </div>
+    </div>
+  );
+
+  // ────────────────────────────────────────────────────────────
+  //  MAIN APP
+  // ────────────────────────────────────────────────────────────
   return (
-    <div style={{background:C.bg,color:C.txt,height:"100%",maxWidth:480,margin:"0 auto",
-                 display:"flex",flexDirection:"column",overflow:"hidden"}}>
+    <div style={{background:C.bg,color:C.txt,height:'100%',maxWidth:480,margin:'0 auto',display:'flex',flexDirection:'column',overflow:'hidden',position:'relative'}}>
 
-      {/* Header */}
-      <div style={{padding:"14px 16px 10px",borderBottom:`1px solid ${C.bd}`,flexShrink:0}}>
-        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
+      {/* ── Header ── */}
+      <div style={{padding:'12px 16px 10px',borderBottom:`1px solid ${C.bd}`,flexShrink:0}}>
+        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:10}}>
           <div>
-            <div style={{fontFamily:"Oxanium,sans-serif",fontSize:25,fontWeight:700,color:C.acc,letterSpacing:1,lineHeight:1}}>
-              VERKSTÆÐIÐ
-            </div>
-            <div style={{fontSize:10,color:C.mut,letterSpacing:2,textTransform:"uppercase",marginTop:2}}>
-              Efnalager · Pöntunarkerfi
+            <div style={{fontFamily:'Oxanium,sans-serif',fontSize:24,fontWeight:700,color:C.acc,letterSpacing:1,lineHeight:1}}>VERKSTÆÐIÐ</div>
+            <div style={{fontSize:10,color:C.mut,letterSpacing:1.5,textTransform:'uppercase',marginTop:1}}>
+              {userName} {isAdmin&&<span style={{color:C.acc}}>· Admin</span>}
             </div>
           </div>
-          {count>0 && (
-            <div style={{background:C.acc,color:"#fff",borderRadius:20,padding:"4px 11px",
-                         fontSize:13,fontWeight:600,display:"flex",alignItems:"center",gap:5}}>
-              <ICart s={13} c="#fff"/> {count}
-            </div>
-          )}
-        </div>
-
-        {/* Leitarsvæði */}
-        <div style={{display:"flex",gap:6}}>
-          <div style={{flex:1,display:"flex",alignItems:"center",background:C.s1,
-                       border:`1px solid ${C.bd}`,borderRadius:10,padding:"8px 10px",gap:7}}>
-            <ISearch s={14} c={C.mut}/>
-            <input value={query}
-              onChange={e=>{setQuery(e.target.value);setAllCats(false);}}
-              onKeyDown={e=>e.key==="Enter"&&crossSearch()}
-              placeholder="Leita að vöru eða vörunúmeri..."
-              style={{flex:1,background:"none",border:"none",outline:"none",color:C.txt,fontSize:14,fontFamily:"inherit"}}/>
-            {query && (
-              <button onClick={clearSearch} className="tap"
-                style={{background:"none",border:"none",color:C.mut,cursor:"pointer",padding:0,display:"flex"}}>
-                <IX s={13} c={C.mut}/>
-              </button>
-            )}
-          </div>
-          <button onClick={startVoice} className={`tap${listening?" puls":""}`} style={{
-            width:38,height:38,borderRadius:10,border:"none",cursor:"pointer",
-            background:listening?C.acc:C.s1,display:"flex",alignItems:"center",justifyContent:"center"}}>
-            <IMic s={15} c={listening?"#fff":C.mut}/>
-          </button>
-          <button onClick={crossSearch} disabled={!query} className="tap" style={{
-            width:38,height:38,borderRadius:10,cursor:query?"pointer":"default",
-            border:`1px solid ${allCats?"#2d4d1e":C.bd}`,
-            background:allCats?"#1a2e12":C.s1,
-            display:"flex",alignItems:"center",justifyContent:"center",opacity:query?1:.35}}>
-            <IZap s={14} c={C.acc}/>
-          </button>
-        </div>
-
-        {allCats && (
-          <div className="anim" style={{marginTop:5,fontSize:11,color:"#4ade80",display:"flex",alignItems:"center",gap:5}}>
-            <IZap s={10} c="#4ade80"/>
-            Leitar í öllum flokkum · {visible.length} niðurstöður
-            <button onClick={()=>setAllCats(false)}
-              style={{background:"none",border:"none",color:C.mut,cursor:"pointer",fontSize:11,padding:0,marginLeft:4}}>
-              hreinsa
+          <div style={{display:'flex',alignItems:'center',gap:8}}>
+            {count>0&&<div style={{background:C.acc,color:'#fff',borderRadius:20,padding:'3px 10px',fontSize:13,fontWeight:600,display:'flex',alignItems:'center',gap:4}}><ICart s={13} c="#fff"/> {count}</div>}
+            <button onClick={()=>setModal('settings')} className="tap" style={{background:'none',border:'none',color:C.mut,cursor:'pointer',padding:4,display:'flex'}}>
+              <IGear s={20} c={C.mut}/>
             </button>
           </div>
-        )}
+        </div>
+
+        {/* Search */}
+        <div style={{display:'flex',gap:6}}>
+          <div style={{flex:1,display:'flex',alignItems:'center',background:C.s1,border:`1px solid ${C.bd}`,borderRadius:10,padding:'8px 10px',gap:7}}>
+            <ISearch s={14} c={C.mut}/>
+            <input value={query} onChange={e=>{setQuery(e.target.value);setAllCats(false);}}
+              onKeyDown={e=>e.key==='Enter'&&(setAllCats(true),setSupF(''))}
+              placeholder="Leita að vöru eða vörunúmeri..."
+              style={{flex:1,background:'none',border:'none',outline:'none',color:C.txt,fontSize:14,fontFamily:'inherit'}}/>
+            {query&&<button onClick={()=>{setQuery('');setSupF('');setAllCats(false);}} className="tap" style={{background:'none',border:'none',color:C.mut,cursor:'pointer',padding:0,display:'flex'}}><IX s={13} c={C.mut}/></button>}
+          </div>
+          <button onClick={startVoice} className={`tap${listening?' puls':''}`} style={{width:38,height:38,borderRadius:10,border:'none',cursor:'pointer',background:listening?C.acc:C.s1,display:'flex',alignItems:'center',justifyContent:'center'}}>
+            <IMic s={15} c={listening?'#fff':C.mut}/>
+          </button>
+          <button onClick={()=>{if(!loading)fetchItems();}} className="tap" style={{width:38,height:38,borderRadius:10,border:`1px solid ${C.bd}`,background:C.s1,display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer'}}>
+            <IRefresh s={14} c={C.mut} cls={loading?'spin':''}/>
+          </button>
+        </div>
+        {allCats&&<div className="anim" style={{marginTop:5,fontSize:11,color:'#4ade80',display:'flex',alignItems:'center',gap:5}}><IZap s={10} c="#4ade80"/>Leitar í öllum flokkum · {visible.length} fundust<button onClick={()=>setAllCats(false)} style={{background:'none',border:'none',color:C.mut,cursor:'pointer',fontSize:11,padding:0,marginLeft:4}}>hreinsa</button></div>}
       </div>
 
-      {/* Flokkarar */}
-      {view==="list" && (
-        <div style={{padding:"8px 16px",borderBottom:`1px solid ${C.bd}`,flexShrink:0}}>
-          <div style={{display:"flex",gap:6,marginBottom:7}}>
-            {["Efnavörur","Perur"].map(c=>(
-              <button key={c} className="tap"
-                onClick={()=>{setCat(c);setSupF("");setAllCats(false);}}
-                style={{padding:"5px 13px",borderRadius:20,border:"none",
-                        background:cat===c&&!allCats?C.acc:C.s2,
-                        color:cat===c&&!allCats?"#fff":C.mut,
-                        fontSize:12,fontWeight:500,cursor:"pointer",
-                        display:"flex",alignItems:"center",gap:5}}>
-                {c==="Efnavörur"
-                  ? <IBox  s={11} c={cat===c&&!allCats?"#fff":C.mut}/>
-                  : <IBulb s={11} c={cat===c&&!allCats?"#fff":C.mut}/>}
-                {c}
+      {/* Filters */}
+      {view==='list'&&(
+        <div style={{padding:'8px 16px',borderBottom:`1px solid ${C.bd}`,flexShrink:0}}>
+          <div style={{display:'flex',gap:6,marginBottom:7}}>
+            {['Efnavörur','Perur'].map(c=>(
+              <button key={c} className="tap" onClick={()=>{setCat(c);setSupF('');setAllCats(false);}}
+                style={{padding:'5px 13px',borderRadius:20,border:'none',background:cat===c&&!allCats?C.acc:C.s2,color:cat===c&&!allCats?'#fff':C.mut,fontSize:12,fontWeight:500,cursor:'pointer',display:'flex',alignItems:'center',gap:5}}>
+                {c==='Efnavörur'?<IBox s={11} c={cat===c&&!allCats?'#fff':C.mut}/>:<IBulb s={11} c={cat===c&&!allCats?'#fff':C.mut}/>}{c}
               </button>
             ))}
           </div>
-          {!allCats && (
-            <div className="hscroll">
-              {["", ...suppliers].map(s=>(
-                <button key={s||"all"} className="tap"
-                  onClick={()=>setSupF(supF===s?"":s)}
-                  style={{padding:"3px 9px",borderRadius:12,fontSize:11,whiteSpace:"nowrap",
-                          fontFamily:"inherit",cursor:"pointer",
-                          border:`1px solid ${supF===s?C.acc:C.bd}`,
-                          background:supF===s?"rgba(232,93,4,.12)":"transparent",
-                          color:supF===s?C.acc:C.mut}}>
-                  {s||"Allar"}
-                </button>
-              ))}
-            </div>
-          )}
+          {!allCats&&<div className="hscroll">
+            {['',...suppliers].map(s=>(
+              <button key={s||'all'} className="tap" onClick={()=>setSupF(supF===s?'':s)}
+                style={{padding:'3px 9px',borderRadius:12,fontSize:11,whiteSpace:'nowrap',fontFamily:'inherit',cursor:'pointer',border:`1px solid ${supF===s?C.acc:C.bd}`,background:supF===s?'rgba(232,93,4,.12)':'transparent',color:supF===s?C.acc:C.mut}}>
+                {s||'Allar'}
+              </button>
+            ))}
+          </div>}
         </div>
       )}
 
-      {/* Skrunsvæði */}
-      <div style={{flex:1,overflowY:"auto"}}>
+      {/* Scroll area */}
+      <div style={{flex:1,overflowY:'auto'}}>
 
-        {/* ═══ Lagerlisti ═══ */}
-        {view==="list" && (
+        {/* LIST VIEW */}
+        {view==='list'&&(
           <>
-            {Object.keys(grouped).length===0
-              ? (
-                <div style={{textAlign:"center",padding:"60px 20px",color:C.mut}}>
-                  <IBox s={40} c={C.mut} style={{opacity:.15}}/>
-                  <div style={{fontSize:15,marginTop:12}}>Engar vörur fundust</div>
-                  <div style={{fontSize:12,marginTop:5}}>Prófaðu ⚡ til að leita í öllum flokkum</div>
-                </div>
-              )
-              : Object.entries(grouped).map(([sup,items])=>(
-                <div key={sup}>
-                  <Divider label={sup}/>
-                  {items.map(item=>(
-                    <div key={item.id} className="tap" onClick={()=>toggle(item.id)}
-                      style={{display:"flex",alignItems:"center",gap:11,padding:"10px 16px",
-                              background:checked[item.id]?"rgba(34,197,94,.05)":"transparent",
-                              borderLeft:checked[item.id]?`3px solid ${C.grn}`:"3px solid transparent"}}>
-                      <div style={{width:21,height:21,borderRadius:6,flexShrink:0,
-                                   border:`2px solid ${checked[item.id]?C.grn:"#3a3a3a"}`,
-                                   background:checked[item.id]?C.grn:"transparent",
-                                   display:"flex",alignItems:"center",justifyContent:"center",
-                                   transition:"all .15s"}}>
-                        {checked[item.id]&&<ICheck s={12} c="#fff"/>}
-                      </div>
-                      <div style={{flex:1,minWidth:0}}>
-                        <div style={{fontSize:14,fontWeight:500,
-                                     color:checked[item.id]?"#444":C.txt,
-                                     textDecoration:checked[item.id]?"line-through":"none",
-                                     whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>
-                          {item.name}
-                        </div>
-                        <div style={{fontSize:10,color:"#3d3d3d",marginTop:1,
-                                     fontFamily:"'Fira Code',monospace",display:"flex",gap:8}}>
-                          {item.sku&&<span>#{item.sku}</span>}
-                          <span>→ {item.qty}</span>
-                        </div>
+            {loading&&items.length===0&&(
+              <div style={{textAlign:'center',padding:'60px 20px',color:C.mut}}>
+                <IRefresh s={32} c={C.mut} cls="spin" style={{opacity:.3}}/>
+                <div style={{fontSize:14,marginTop:12}}>Sæki vörulista...</div>
+              </div>
+            )}
+            {loadErr&&(
+              <div style={{textAlign:'center',padding:'40px 20px',color:C.mut}}>
+                <div style={{fontSize:14}}>Gat ekki tengst GitHub</div>
+                <button onClick={fetchItems} className="tap" style={{marginTop:12,padding:'8px 16px',borderRadius:8,border:`1px solid ${C.bd}`,background:'none',color:C.acc,fontSize:13,cursor:'pointer',fontFamily:'inherit'}}>Reyna aftur</button>
+              </div>
+            )}
+            {!loading&&Object.keys(grouped).length===0&&query&&(
+              <div style={{textAlign:'center',padding:'60px 20px',color:C.mut}}>
+                <IBox s={36} c={C.mut} style={{opacity:.15}}/>
+                <div style={{fontSize:14,marginTop:12}}>Engar vörur fundust</div>
+              </div>
+            )}
+            {Object.entries(grouped).map(([sup,its])=>(
+              <div key={sup}>
+                <Divider label={sup}/>
+                {its.map(item=>(
+                  <div key={item.id} className="tap" onClick={()=>toggle(item.id)}
+                    style={{display:'flex',alignItems:'center',gap:11,padding:'10px 16px',background:checked[item.id]?'rgba(34,197,94,.05)':'transparent',borderLeft:checked[item.id]?`3px solid ${C.grn}`:'3px solid transparent'}}>
+                    <div style={{width:21,height:21,borderRadius:6,flexShrink:0,border:`2px solid ${checked[item.id]?C.grn:'#3a3a3a'}`,background:checked[item.id]?C.grn:'transparent',display:'flex',alignItems:'center',justifyContent:'center',transition:'all .15s'}}>
+                      {checked[item.id]&&<ICheck s={12} c="#fff"/>}
+                    </div>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{fontSize:14,fontWeight:500,color:checked[item.id]?'#444':C.txt,textDecoration:checked[item.id]?'line-through':'none',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{item.name}</div>
+                      <div style={{fontSize:10,color:'#3d3d3d',marginTop:1,fontFamily:"'Fira Code',monospace",display:'flex',gap:8}}>
+                        {item.sku&&<span>#{item.sku}</span>}<span>→ {item.qty}</span>
                       </div>
                     </div>
-                  ))}
-                </div>
-              ))
-            }
-            <div style={{height:72}}/>
+                  </div>
+                ))}
+              </div>
+            ))}
+            <div style={{height:100}}/>
           </>
         )}
 
-        {/* ═══ Pöntunarsýn ═══ */}
-        {view==="order" && (
+        {/* ORDER VIEW */}
+        {view==='order'&&(
           <>
             {count===0
-              ? (
-                <div style={{textAlign:"center",padding:"80px 20px",color:C.mut}}>
-                  <ICart s={48} c={C.mut} style={{opacity:.12}}/>
-                  <div style={{fontSize:16,marginTop:14}}>Pöntunin er tóm</div>
-                  <div style={{fontSize:13,marginTop:7}}>Farðu á lagerlista og hakaðu við vörur</div>
-                </div>
-              )
-              : (
+              ?<div style={{textAlign:'center',padding:'80px 20px',color:C.mut}}><ICart s={48} c={C.mut} style={{opacity:.12}}/><div style={{fontSize:16,marginTop:14}}>Pöntunin er tóm</div><div style={{fontSize:13,marginTop:7}}>Farðu á lagerlista og hakaðu við vörur</div></div>
+              :(
                 <>
-                  {Object.entries(checkedGrp).map(([sup,items])=>(
-                    <div key={sup} style={{margin:"12px 16px 0",background:C.s1,
-                      borderRadius:12,border:`1px solid ${C.bd}`,overflow:"hidden"}}>
-                      <div style={{padding:"10px 14px 8px",borderBottom:`1px solid ${C.bd}`,
-                                   display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+                  {Object.entries(checkedGrp).map(([sup,its])=>(
+                    <div key={sup} style={{margin:'12px 16px 0',background:C.s1,borderRadius:12,border:`1px solid ${C.bd}`,overflow:'hidden'}}>
+                      <div style={{padding:'10px 14px 8px',borderBottom:`1px solid ${C.bd}`,display:'flex',alignItems:'center',justifyContent:'space-between'}}>
                         <div>
                           <div style={{fontWeight:600,fontSize:14}}>{sup}</div>
-                          {SUPPLIER_EMAILS[sup]&&(
-                            <div style={{fontSize:10,color:C.mut,fontFamily:"'Fira Code',monospace",marginTop:1}}>
-                              {SUPPLIER_EMAILS[sup]}
-                            </div>
-                          )}
+                          {SUP_EMAILS[sup]&&<div style={{fontSize:10,color:C.mut,fontFamily:"'Fira Code',monospace",marginTop:1}}>{SUP_EMAILS[sup]}</div>}
                         </div>
-                        <button onClick={()=>sendEmail(sup)} className="tap" style={{
-                          background:"rgba(232,93,4,.1)",border:"1px solid rgba(232,93,4,.25)",
-                          color:C.acc,padding:"5px 11px",borderRadius:8,
-                          fontSize:11,fontWeight:600,cursor:"pointer",
-                          display:"flex",alignItems:"center",gap:4,fontFamily:"inherit"}}>
+                        <button onClick={()=>openShare(sup)} className="tap" style={{background:'rgba(232,93,4,.1)',border:'1px solid rgba(232,93,4,.25)',color:C.acc,padding:'5px 11px',borderRadius:8,fontSize:11,fontWeight:600,cursor:'pointer',display:'flex',alignItems:'center',gap:4,fontFamily:'inherit'}}>
                           <IMail s={11} c={C.acc}/> Senda
                         </button>
                       </div>
-                      {items.map((item,i)=>(
-                        <div key={item.id} style={{display:"flex",alignItems:"center",
-                          justifyContent:"space-between",padding:"8px 14px",
-                          borderBottom:i<items.length-1?`1px solid ${C.bd}`:"none"}}>
+                      {its.map((item,i)=>(
+                        <div key={item.id} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'8px 14px',borderBottom:i<its.length-1?`1px solid ${C.bd}`:'none'}}>
                           <div style={{flex:1,minWidth:0}}>
-                            <div style={{fontSize:13,fontWeight:500,
-                                         whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>
-                              {item.name}
-                            </div>
-                            <div style={{fontSize:10,color:C.mut,fontFamily:"'Fira Code',monospace",marginTop:1}}>
-                              {item.sku?`#${item.sku} · `:""}{item.qty}
-                            </div>
+                            <div style={{fontSize:13,fontWeight:500,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{item.name}</div>
+                            <div style={{fontSize:10,color:C.mut,fontFamily:"'Fira Code',monospace",marginTop:1}}>{item.sku?`#${item.sku} · `:''}{item.qty}</div>
                           </div>
-                          <button onClick={()=>toggle(item.id)} className="tap"
-                            style={{background:"none",border:"none",cursor:"pointer",
-                                    padding:4,display:"flex",marginLeft:8}}>
-                            <IX s={13} c="#555"/>
-                          </button>
+                          <button onClick={()=>toggle(item.id)} className="tap" style={{background:'none',border:'none',cursor:'pointer',padding:4,display:'flex',marginLeft:8}}><IX s={13} c="#555"/></button>
                         </div>
                       ))}
                     </div>
                   ))}
-                  <div style={{padding:"16px",display:"flex",flexDirection:"column",gap:8}}>
-                    <button onClick={()=>sendEmail()} className="tap" style={{
-                      width:"100%",padding:"14px",borderRadius:12,border:"none",
-                      background:C.acc,color:"#fff",fontSize:14,fontWeight:600,cursor:"pointer",
-                      display:"flex",alignItems:"center",justifyContent:"center",gap:8,fontFamily:"inherit"}}>
+                  <div style={{padding:'16px',display:'flex',flexDirection:'column',gap:8}}>
+                    <button onClick={()=>openShare()} className="tap" style={{width:'100%',padding:14,borderRadius:12,border:'none',background:C.acc,color:'#fff',fontSize:14,fontWeight:600,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:8,fontFamily:'inherit'}}>
                       <IMail s={16} c="#fff"/> Senda yfirlit til mín · {count} vörur
                     </button>
-                    <button onClick={()=>{setChecked({});showToast("Pöntun hreinsuð");}} className="tap" style={{
-                      width:"100%",padding:"12px",borderRadius:12,background:"transparent",
-                      border:`1px solid #2a2a2a`,color:C.mut,fontSize:13,cursor:"pointer",
-                      display:"flex",alignItems:"center",justifyContent:"center",gap:7,fontFamily:"inherit"}}>
+                    <button onClick={()=>{setChecked({});showToast('Pöntun hreinsuð');}} className="tap" style={{width:'100%',padding:12,borderRadius:12,background:'transparent',border:`1px solid #2a2a2a`,color:C.mut,fontSize:13,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:7,fontFamily:'inherit'}}>
                       <ITrash s={13} c={C.mut}/> Hreinsa allt
                     </button>
                   </div>
-                  <div style={{height:72}}/>
+                  <div style={{height:100}}/>
                 </>
               )
             }
@@ -534,39 +459,191 @@ function App() {
         )}
       </div>
 
-      {/* Neðri flipastika */}
-      <div style={{display:"flex",borderTop:`1px solid ${C.bd}`,flexShrink:0}}>
-        {[
-          {id:"list",  label:"Lager",   I:IBox},
-          {id:"order", label:`Pöntun${count>0?` (${count})`:""}`, I:ICart},
-        ].map(({id,label,I})=>(
-          <button key={id} onClick={()=>setView(id)} className="tap" style={{
-            flex:1,padding:"11px 8px",border:"none",background:"transparent",
-            color:view===id?C.acc:C.mut,
-            borderTop:view===id?`2px solid ${C.acc}`:"2px solid transparent",
-            display:"flex",flexDirection:"column",alignItems:"center",gap:3,
-            cursor:"pointer",marginTop:-1,fontFamily:"inherit"}}>
-            <I s={18} c={view===id?C.acc:C.mut}/>
-            <span style={{fontSize:11,fontWeight:view===id?600:400}}>{label}</span>
+      {/* Bottom nav */}
+      <div style={{display:'flex',borderTop:`1px solid ${C.bd}`,flexShrink:0}}>
+        {[{id:'list',label:'Lager',I:IBox},{id:'order',label:`Pöntun${count>0?` (${count})`:''}`,I:ICart}].map(({id,label,I})=>(
+          <button key={id} onClick={()=>setView(id)} className="tap" style={{flex:1,padding:'11px 8px',border:'none',background:'transparent',color:view===id?C.acc:C.mut,borderTop:view===id?`2px solid ${C.acc}`:'2px solid transparent',display:'flex',flexDirection:'column',alignItems:'center',gap:3,cursor:'pointer',marginTop:-1,fontFamily:'inherit'}}>
+            <I s={18} c={view===id?C.acc:C.mut}/><span style={{fontSize:11,fontWeight:view===id?600:400}}>{label}</span>
           </button>
         ))}
       </div>
 
-      {/* Toast tilkynning */}
-      {toast&&(
-        <div className="anim" style={{
-          position:"absolute",bottom:68,left:"50%",transform:"translateX(-50%)",
-          background:"#1e1e1e",border:`1px solid ${C.bd}`,borderRadius:20,
-          padding:"7px 16px",fontSize:12,color:C.txt,whiteSpace:"nowrap",
-          boxShadow:"0 4px 20px rgba(0,0,0,.5)",zIndex:100}}>
-          {toast}
+      {/* ── FAB: Tillaga ── */}
+      <input ref={photoRef} type="file" accept="image/*" capture="environment" style={{display:'none'}} onChange={onPhotoChange}/>
+      <button onClick={()=>photoRef.current&&photoRef.current.click()} className="tap"
+        style={{position:'absolute',bottom:72,right:16,background:C.s1,border:`1px solid ${C.bd}`,borderRadius:14,padding:'10px 14px',display:'flex',alignItems:'center',gap:8,cursor:'pointer',boxShadow:'0 4px 16px rgba(0,0,0,.5)',zIndex:10}}>
+        <ICamera s={17} c={C.acc}/>
+        <span style={{fontSize:12,fontWeight:600,color:C.txt,whiteSpace:'nowrap'}}>Senda inn tillögu af vöru</span>
+      </button>
+
+      {/* ══════════════════════════════════════════════════════
+          MODALS
+      ══════════════════════════════════════════════════════ */}
+
+      {/* ── Settings modal ── */}
+      {modal==='settings'&&(
+        <div onClick={()=>setModal(null)} style={{position:'absolute',inset:0,background:'rgba(0,0,0,.75)',display:'flex',flexDirection:'column',justifyContent:'flex-end',zIndex:200}}>
+          <div onClick={e=>e.stopPropagation()} className="sheet" style={{background:C.s1,borderRadius:'18px 18px 0 0',padding:'20px 16px 36px',border:`1px solid ${C.bd}`,maxHeight:'85vh',overflowY:'auto'}}>
+            <div style={{width:36,height:4,background:'#333',borderRadius:2,margin:'0 auto 20px'}}/>
+
+            {/* User section */}
+            <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:16}}>
+              <div style={{width:36,height:36,borderRadius:'50%',background:C.acc,display:'flex',alignItems:'center',justifyContent:'center'}}><IUser s={18} c="#fff"/></div>
+              <div style={{flex:1}}>
+                <div style={{fontSize:13,fontWeight:600}}>{userName}</div>
+                <div style={{fontSize:11,color:C.mut}}>Notandi</div>
+              </div>
+            </div>
+            <Field label="Breyta nafni" value={userName} onChange={v=>{setUserName(v);localStorage.setItem('vrkst-name',v);}} placeholder="Nafn þitt"/>
+
+            <div style={{height:1,background:C.bd,margin:'16px 0'}}/>
+
+            {/* Admin section */}
+            {!isAdmin?(
+              <div>
+                <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:12}}>
+                  <ILock s={16} c={C.mut}/><span style={{fontSize:13,color:C.mut,fontWeight:500}}>Admin innskráning</span>
+                </div>
+                <Field label="Lykilorð" value={pwInput} onChange={setPwInput} placeholder="Admin lykilorð" type="password"/>
+                {pwError&&<div style={{fontSize:12,color:C.red,marginBottom:8,marginTop:-8}}>Rangt lykilorð</div>}
+                <button onClick={loginAdmin} className="tap" style={{width:'100%',padding:11,borderRadius:10,border:'none',background:C.acc,color:'#fff',fontSize:13,fontWeight:600,cursor:'pointer',fontFamily:'inherit'}}>
+                  Skrá inn sem Admin
+                </button>
+              </div>
+            ):(
+              <div>
+                <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:14}}>
+                  <IKey s={16} c={C.acc}/><span style={{fontSize:13,color:C.acc,fontWeight:600}}>Admin stillingar</span>
+                  <button onClick={()=>setIsAdmin(false)} style={{marginLeft:'auto',background:'none',border:'none',color:C.mut,cursor:'pointer',fontSize:11,padding:'4px 8px',borderRadius:6,fontFamily:'inherit'}}>Útskrá</button>
+                </div>
+
+                <Field label="Nýtt lykilorð (valfrjálst)" value={newPw} onChange={setNewPw} placeholder="Slá inn til að breyta" type="password"/>
+                {newPw&&<button onClick={()=>{localStorage.setItem('vrkst-pw',newPw);setNewPw('');showToast('Lykilorð breytt!');}} className="tap" style={{width:'100%',padding:9,borderRadius:8,border:`1px solid ${C.bd}`,background:'none',color:C.txt,fontSize:12,cursor:'pointer',fontFamily:'inherit',marginBottom:12}}>Vista lykilorð</button>}
+
+                <div style={{height:1,background:C.bd,margin:'4px 0 12px'}}/>
+
+                <div style={{fontSize:11,color:C.mut,marginBottom:6}}>GITHUB TOKEN</div>
+                <div style={{fontSize:11,color:'#555',marginBottom:8,lineHeight:1.5}}>
+                  github.com → Settings → Developer settings → Personal access tokens → Generate (Contents: Read & Write)
+                </div>
+                <Field value={ghToken} onChange={v=>{setGhToken(v);localStorage.setItem('vrkst-token',v);}} placeholder="ghp_xxxxxxxxxxxx" mono/>
+
+                <button onClick={()=>{setModal('addItem');}} className="tap" style={{width:'100%',padding:12,borderRadius:10,border:'none',background:C.acc,color:'#fff',fontSize:13,fontWeight:600,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:8,fontFamily:'inherit',marginTop:4}}>
+                  <IPlus s={15} c="#fff"/> Bæta við nýrri vöru
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       )}
+
+      {/* ── Add item modal ── */}
+      {modal==='addItem'&&(
+        <div onClick={()=>setModal('settings')} style={{position:'absolute',inset:0,background:'rgba(0,0,0,.75)',display:'flex',flexDirection:'column',justifyContent:'flex-end',zIndex:210}}>
+          <div onClick={e=>e.stopPropagation()} className="sheet" style={{background:C.s1,borderRadius:'18px 18px 0 0',padding:'20px 16px 36px',border:`1px solid ${C.bd}`}}>
+            <div style={{width:36,height:4,background:'#333',borderRadius:2,margin:'0 auto 16px'}}/>
+            <div style={{fontWeight:700,fontSize:17,marginBottom:16}}>Bæta við vöru</div>
+
+            <Field label="Nafn vöru *" value={newItem.name} onChange={v=>setNewItem(p=>({...p,name:v}))} placeholder="t.d. WD-40 sprey"/>
+            <Field label="Vörunúmer (SKU)" value={newItem.sku} onChange={v=>setNewItem(p=>({...p,sku:v}))} placeholder="t.d. wd40-400" mono/>
+
+            <div style={{marginBottom:12}}>
+              <div style={{fontSize:11,color:C.mut,letterSpacing:1,textTransform:'uppercase',marginBottom:4}}>Flokkur</div>
+              <div style={{display:'flex',gap:8}}>
+                {['Efnavörur','Perur'].map(c=>(
+                  <button key={c} onClick={()=>setNewItem(p=>({...p,cat:c}))} className="tap"
+                    style={{flex:1,padding:'8px',borderRadius:8,border:`1px solid ${newItem.cat===c?C.acc:C.bd}`,background:newItem.cat===c?'rgba(232,93,4,.12)':'transparent',color:newItem.cat===c?C.acc:C.mut,fontSize:13,cursor:'pointer',fontFamily:'inherit'}}>
+                    {c}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div style={{marginBottom:12}}>
+              <div style={{fontSize:11,color:C.mut,letterSpacing:1,textTransform:'uppercase',marginBottom:4}}>Birgir</div>
+              <select value={newItem.sup} onChange={e=>setNewItem(p=>({...p,sup:e.target.value}))}
+                style={{width:'100%',background:C.s2,border:`1px solid ${C.bd}`,borderRadius:8,padding:'10px 12px',color:C.txt,fontSize:14,fontFamily:'inherit',outline:'none'}}>
+                {ALL_SUPS.map(s=><option key={s} value={s}>{s}</option>)}
+              </select>
+            </div>
+
+            <Field label="Pöntunarmagn *" value={newItem.qty} onChange={v=>setNewItem(p=>({...p,qty:v}))} placeholder="t.d. 2 brúsar"/>
+
+            <div style={{display:'flex',gap:8,marginTop:4}}>
+              <button onClick={()=>setModal('settings')} className="tap" style={{flex:1,padding:12,borderRadius:10,border:`1px solid ${C.bd}`,background:'none',color:C.mut,fontSize:13,cursor:'pointer',fontFamily:'inherit'}}>Hætta við</button>
+              <button onClick={saveItem} disabled={saving||!newItem.name||!newItem.qty} className="tap"
+                style={{flex:2,padding:12,borderRadius:10,border:'none',background:newItem.name&&newItem.qty?C.acc:'#333',color:'#fff',fontSize:13,fontWeight:600,cursor:'pointer',fontFamily:'inherit',display:'flex',alignItems:'center',justifyContent:'center',gap:6}}>
+                {saving?<IRefresh s={14} c="#fff" cls="spin"/>:<IPlus s={14} c="#fff"/>}
+                {saving?'Vista...':'Bæta á lista'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Photo request modal ── */}
+      {modal==='photo'&&(
+        <div onClick={resetPhoto} style={{position:'absolute',inset:0,background:'rgba(0,0,0,.85)',display:'flex',flexDirection:'column',justifyContent:'flex-end',zIndex:200}}>
+          <div onClick={e=>e.stopPropagation()} className="sheet" style={{background:C.s1,borderRadius:'18px 18px 0 0',padding:'20px 16px 36px',border:`1px solid ${C.bd}`}}>
+            <div style={{width:36,height:4,background:'#333',borderRadius:2,margin:'0 auto 16px'}}/>
+            <div style={{fontWeight:700,fontSize:17,marginBottom:4}}>Senda inn tillögu af vöru</div>
+            <div style={{fontSize:12,color:C.mut,marginBottom:16}}>Mynd og lýsing fara til yfirmanns · {userName}</div>
+
+            {/* Photo preview */}
+            {photoPreview&&(
+              <div style={{position:'relative',marginBottom:12}}>
+                <img src={photoPreview} alt="preview" style={{width:'100%',borderRadius:10,maxHeight:200,objectFit:'cover'}}/>
+                <button onClick={()=>photoRef.current&&photoRef.current.click()} className="tap"
+                  style={{position:'absolute',bottom:8,right:8,background:'rgba(0,0,0,.7)',border:'none',borderRadius:8,padding:'6px 10px',color:'#fff',fontSize:11,cursor:'pointer',display:'flex',alignItems:'center',gap:5,fontFamily:'inherit'}}>
+                  <ICamera s={12} c="#fff"/> Taka aðra mynd
+                </button>
+              </div>
+            )}
+
+            {/* Description */}
+            <div style={{marginBottom:14}}>
+              <div style={{fontSize:11,color:C.mut,letterSpacing:1,textTransform:'uppercase',marginBottom:4}}>Lýsing / nafn vöru</div>
+              <textarea value={photoDesc} onChange={e=>setPhotoDesc(e.target.value)}
+                placeholder="Hvað er þetta? Hvar er það notað?"
+                rows={3}
+                style={{width:'100%',background:C.s2,border:`1px solid ${C.bd}`,borderRadius:8,padding:'10px 12px',color:C.txt,fontSize:14,fontFamily:'inherit',outline:'none',resize:'none'}}/>
+            </div>
+
+            <div style={{display:'flex',gap:8}}>
+              <button onClick={resetPhoto} className="tap" style={{flex:1,padding:12,borderRadius:10,border:`1px solid ${C.bd}`,background:'none',color:C.mut,fontSize:13,cursor:'pointer',fontFamily:'inherit'}}>Hætta við</button>
+              <button onClick={sendPhotoRequest} className="tap"
+                style={{flex:2,padding:12,borderRadius:10,border:'none',background:C.acc,color:'#fff',fontSize:13,fontWeight:600,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:7,fontFamily:'inherit'}}>
+                <IShare s={14} c="#fff"/> Senda tillögu
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Order share modal ── */}
+      {orderShare&&(
+        <div onClick={()=>setOrderShare(null)} style={{position:'absolute',inset:0,background:'rgba(0,0,0,.75)',display:'flex',flexDirection:'column',justifyContent:'flex-end',zIndex:200}}>
+          <div onClick={e=>e.stopPropagation()} className="sheet" style={{background:C.s1,borderRadius:'18px 18px 0 0',padding:'20px 16px 36px',border:`1px solid ${C.bd}`}}>
+            <div style={{width:36,height:4,background:'#333',borderRadius:2,margin:'0 auto 16px'}}/>
+            <div style={{fontWeight:700,fontSize:17,marginBottom:3}}>Senda pöntun</div>
+            <div style={{fontSize:11,color:C.mut,fontFamily:"'Fira Code',monospace",marginBottom:12}}>{orderShare.to}</div>
+            <div style={{background:C.bg,borderRadius:10,padding:'10px 12px',fontSize:11,fontFamily:"'Fira Code',monospace",color:'#888',maxHeight:160,overflowY:'auto',marginBottom:14,whiteSpace:'pre-wrap',border:`1px solid ${C.bd}`,lineHeight:1.6}}>{orderShare.body}</div>
+            <div style={{display:'flex',flexDirection:'column',gap:8}}>
+              {navigator.share&&<button onClick={()=>navigator.share({title:orderShare.subject,text:orderShare.body}).catch(()=>{})} className="tap" style={{width:'100%',padding:13,borderRadius:12,border:'none',background:C.acc,color:'#fff',fontSize:14,fontWeight:600,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:8,fontFamily:'inherit'}}><IShare s={16} c="#fff"/> Deila (tölvupóstur / WhatsApp...)</button>}
+              <button onClick={()=>navigator.clipboard.writeText(orderShare.body).then(()=>showToast('✓ Afritað')).catch(()=>{})} className="tap" style={{width:'100%',padding:12,borderRadius:12,border:`1px solid ${C.bd}`,background:C.s2,color:C.txt,fontSize:13,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:7,fontFamily:'inherit'}}><ICopy s={14} c={C.txt}/> Afrita</button>
+              <button onClick={()=>{window.open(`mailto:${orderShare.to}?subject=${encodeURIComponent(orderShare.subject)}&body=${encodeURIComponent(orderShare.body)}`);}} className="tap" style={{width:'100%',padding:12,borderRadius:12,border:`1px solid ${C.bd}`,background:'transparent',color:C.mut,fontSize:13,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:7,fontFamily:'inherit'}}><IMail s={14} c={C.mut}/> Opna í tölvupósti</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Toast */}
+      {toast&&<div className="anim" style={{position:'absolute',bottom:72,left:'50%',transform:'translateX(-50%)',background:'#1e1e1e',border:`1px solid ${C.bd}`,borderRadius:20,padding:'7px 16px',fontSize:12,color:C.txt,whiteSpace:'nowrap',boxShadow:'0 4px 20px rgba(0,0,0,.5)',zIndex:300,pointerEvents:'none'}}>{toast}</div>}
     </div>
   );
 }
 
-ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
 </script>
 </body>
 </html>
