@@ -18,13 +18,12 @@
     ::-webkit-scrollbar{width:3px;}::-webkit-scrollbar-thumb{background:#2a2a2a;border-radius:2px;}
     .tap{cursor:pointer;transition:opacity .1s,transform .1s;}.tap:active{opacity:.75;transform:scale(.97);}
     .hscroll{display:flex;gap:6px;overflow-x:auto;padding-bottom:2px;}.hscroll::-webkit-scrollbar{display:none;}
-    input,textarea{-webkit-appearance:none;appearance:none;}button{font-family:inherit;}
-    @keyframes up{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
-    .anim{animation:up .18s ease forwards;}
+    input,textarea,select{-webkit-appearance:none;appearance:none;}button{font-family:inherit;}
+    @keyframes up{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}.anim{animation:up .18s ease forwards;}
     @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}.puls{animation:pulse .9s ease infinite;}
-    @keyframes slideup{from{transform:translateY(100%)}to{transform:translateY(0)}}
-    .sheet{animation:slideup .26s cubic-bezier(.32,1,.32,1) forwards;}
+    @keyframes slideup{from{transform:translateY(100%)}to{transform:translateY(0)}}.sheet{animation:slideup .26s cubic-bezier(.32,1,.32,1) forwards;}
     @keyframes spin{to{transform:rotate(360deg)}}.spin{animation:spin .8s linear infinite;}
+    @keyframes pop{0%{transform:scale(.8);opacity:0}100%{transform:scale(1);opacity:1}}.pop{animation:pop .3s cubic-bezier(.34,1.56,.64,1) forwards;}
   </style>
 </head>
 <body>
@@ -35,13 +34,16 @@
 <script type="text/babel">
 const {useState,useEffect,useMemo,useCallback,useRef} = React;
 
-// ── Config ────────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════
+//  CONFIG
+// ═══════════════════════════════════════════════════════════════
 const REPO          = 'hzak222/PantaAM';
 const JSON_FILE     = 'vorur.json';
 const RAW_URL       = `https://raw.githubusercontent.com/${REPO}/main/${JSON_FILE}`;
 const API_URL       = `https://api.github.com/repos/${REPO}/contents/${JSON_FILE}`;
-const MANAGER_EMAIL = 'atlireynir@gmail.com';
+const ADMIN_EMAIL   = 'atlireynir@gmail.com';
 const DEFAULT_PW    = 'admin123';
+const ADMIN_NAME    = 'AMJ'; // Birtist í staðfestingarmelding til notanda
 
 const SUP_EMAILS = {
   "Jákó":"jako@jako.is","Kemi":"kemi@kemi.is",
@@ -50,16 +52,16 @@ const SUP_EMAILS = {
 };
 const ALL_SUPS = ['Jákó','Kemi','Tandur','Wurth','Bosch','Philips'];
 
-// ── Hjálp ──────────────────────────────────────────────────────
-const norm = s => (s||'').toLowerCase()
-  .replace(/[áä]/g,'a').replace(/[éê]/g,'e').replace(/[íî]/g,'i')
-  .replace(/[óö]/g,'o').replace(/[úü]/g,'u').replace(/ý/g,'y')
-  .replace(/ð/g,'d').replace(/þ/g,'th').replace(/æ/g,'ae');
-const hits = (item,q) => { if(!q) return true; return norm(q).split(/\s+/).filter(Boolean).every(w=>norm(`${item.name} ${item.sku} ${item.sup}`).includes(w)); };
-const grp  = (arr,key) => arr.reduce((g,x)=>{(g[x[key]]=g[x[key]]||[]).push(x);return g;},{});
-const buildBody = (items,supName) => {
-  const dt = new Date().toLocaleDateString('is-IS');
-  let b = supName ? 'Hæ,\n\nVið viljum panta eftirfarandi:\n\n' : `Pöntunaryfirlit – ${dt}\n\n`;
+// ═══════════════════════════════════════════════════════════════
+//  HJÁLPARFÖLL
+// ═══════════════════════════════════════════════════════════════
+const norm = s=>(s||'').toLowerCase().replace(/[áä]/g,'a').replace(/[éê]/g,'e').replace(/[íî]/g,'i').replace(/[óö]/g,'o').replace(/[úü]/g,'u').replace(/ý/g,'y').replace(/ð/g,'d').replace(/þ/g,'th').replace(/æ/g,'ae');
+const hits = (item,q)=>{ if(!q) return true; return norm(q).split(/\s+/).filter(Boolean).every(w=>norm(`${item.name} ${item.sku} ${item.sup}`).includes(w)); };
+const grp  = (arr,key)=>arr.reduce((g,x)=>{(g[x[key]]=g[x[key]]||[]).push(x);return g;},{});
+
+const buildOrderBody = (items,supName)=>{
+  const dt=new Date().toLocaleDateString('is-IS');
+  let b=supName?'Hæ,\n\nVið viljum panta eftirfarandi:\n\n':`Pöntunaryfirlit – ${dt}\n\n`;
   Object.entries(grp(items,'sup')).forEach(([s,its])=>{
     if(!supName) b+=`── ${s} ──\n`;
     its.forEach(i=>{b+=`• ${i.name}`;if(i.sku) b+=` (VNR: ${i.sku})`;b+=` — ${i.qty}\n`;});
@@ -68,51 +70,79 @@ const buildBody = (items,supName) => {
   return b+(supName?'\nKveðja,\nVerkstæðið':'\nSent frá Verkstæðinu');
 };
 
-// ── SVG tákn ──────────────────────────────────────────────────
-const Ic = ({s=16,c='currentColor',style:st,cls,children}) =>
-  <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={st} className={cls}>{children}</svg>;
-const ISearch  = ({s,c})=><Ic s={s} c={c}><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></Ic>;
-const IMic     = ({s,c,cls})=><Ic s={s} c={c} cls={cls}><path d="M12 2a3 3 0 0 1 3 3v7a3 3 0 0 1-6 0V5a3 3 0 0 1 3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></Ic>;
-const ICart    = ({s,c})=><Ic s={s} c={c}><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></Ic>;
-const IBox     = ({s,c})=><Ic s={s} c={c}><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></Ic>;
-const IBulb    = ({s,c})=><Ic s={s} c={c}><line x1="9" y1="21" x2="15" y2="21"/><line x1="9" y1="18" x2="15" y2="18"/><path d="M12 3a6 6 0 0 1 6 6c0 2.2-1.2 4.1-3 5.2V16H9v-1.8C7.2 13.1 6 11.2 6 9a6 6 0 0 1 6-6z"/></Ic>;
-const ICheck   = ({s,c})=><Ic s={s} c={c}><polyline points="20 6 9 17 4 12"/></Ic>;
-const IX       = ({s,c})=><Ic s={s} c={c}><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></Ic>;
-const IMail    = ({s,c})=><Ic s={s} c={c}><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></Ic>;
-const ITrash   = ({s,c})=><Ic s={s} c={c}><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></Ic>;
-const IZap     = ({s,c})=><Ic s={s} c={c}><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></Ic>;
-const ICopy    = ({s,c})=><Ic s={s} c={c}><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></Ic>;
-const IShare   = ({s,c})=><Ic s={s} c={c}><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></Ic>;
-const ICamera  = ({s,c})=><Ic s={s} c={c}><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></Ic>;
-const IGear    = ({s,c})=><Ic s={s} c={c}><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></Ic>;
-const IPlus    = ({s,c})=><Ic s={s} c={c}><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></Ic>;
-const IRefresh = ({s,c,cls})=><Ic s={s} c={c} cls={cls}><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></Ic>;
-const IUser    = ({s,c})=><Ic s={s} c={c}><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></Ic>;
-const ILock    = ({s,c})=><Ic s={s} c={c}><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></Ic>;
-const IKey     = ({s,c})=><Ic s={s} c={c}><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></Ic>;
+// GitHub API commit helper
+const githubCommit = async (ghToken, newItems, message) => {
+  const res  = await fetch(API_URL,{headers:{Authorization:`token ${ghToken}`,Accept:'application/vnd.github.v3+json'}});
+  const data = await res.json();
+  if(!res.ok) throw new Error(data.message||'API villa');
+  const content = btoa(unescape(encodeURIComponent(JSON.stringify(newItems,null,2))));
+  const put = await fetch(API_URL,{method:'PUT',headers:{Authorization:`token ${ghToken}`,'Content-Type':'application/json'},
+    body:JSON.stringify({message,content,sha:data.sha})});
+  if(!put.ok) throw new Error('commit villa');
+  return newItems;
+};
 
-const C = {bg:'#0b0b0b',s1:'#141414',s2:'#1c1c1c',bd:'#272727',acc:'#E85D04',txt:'#efefef',mut:'#666',grn:'#22c55e',red:'#ef4444'};
+// ═══════════════════════════════════════════════════════════════
+//  SVG TÁKN
+// ═══════════════════════════════════════════════════════════════
+const Ic=({s=16,c='currentColor',st,cls,ch})=><svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={st} className={cls}>{ch}</svg>;
+const ISearch  =({s,c})=><Ic s={s} c={c} ch={<><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></>}/>;
+const IMic     =({s,c,cls})=><Ic s={s} c={c} cls={cls} ch={<><path d="M12 2a3 3 0 0 1 3 3v7a3 3 0 0 1-6 0V5a3 3 0 0 1 3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></>}/>;
+const ICart    =({s,c})=><Ic s={s} c={c} ch={<><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></>}/>;
+const IBox     =({s,c})=><Ic s={s} c={c} ch={<><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></>}/>;
+const IBulb    =({s,c})=><Ic s={s} c={c} ch={<><line x1="9" y1="21" x2="15" y2="21"/><line x1="9" y1="18" x2="15" y2="18"/><path d="M12 3a6 6 0 0 1 6 6c0 2.2-1.2 4.1-3 5.2V16H9v-1.8C7.2 13.1 6 11.2 6 9a6 6 0 0 1 6-6z"/></>}/>;
+const ICheck   =({s,c})=><Ic s={s} c={c} ch={<polyline points="20 6 9 17 4 12"/>}/>;
+const IX       =({s,c})=><Ic s={s} c={c} ch={<><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></>}/>;
+const IMail    =({s,c})=><Ic s={s} c={c} ch={<><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></>}/>;
+const ITrash   =({s,c})=><Ic s={s} c={c} ch={<><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></>}/>;
+const IZap     =({s,c})=><Ic s={s} c={c} ch={<polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>}/>;
+const ICopy    =({s,c})=><Ic s={s} c={c} ch={<><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></>}/>;
+const IShare   =({s,c})=><Ic s={s} c={c} ch={<><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></>}/>;
+const ICamera  =({s,c})=><Ic s={s} c={c} ch={<><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></>}/>;
+const IGear    =({s,c})=><Ic s={s} c={c} ch={<><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></>}/>;
+const IPlus    =({s,c})=><Ic s={s} c={c} ch={<><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></>}/>;
+const IEdit    =({s,c})=><Ic s={s} c={c} ch={<><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></>}/>;
+const IRefresh =({s,c,cls})=><Ic s={s} c={c} cls={cls} ch={<><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></>}/>;
+const IUser    =({s,c})=><Ic s={s} c={c} ch={<><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></>}/>;
+const ILock    =({s,c})=><Ic s={s} c={c} ch={<><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></>}/>;
+const IKey     =({s,c})=><Ic s={s} c={c} ch={<><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></>}/>;
+const IBell    =({s,c})=><Ic s={s} c={c} ch={<><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></>}/>;
+const IShield  =({s,c})=><Ic s={s} c={c} ch={<><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></>}/>;
+const IUsers   =({s,c})=><Ic s={s} c={c} ch={<><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></>}/>;
 
-// ── Input component ───────────────────────────────────────────
-const Field = ({label,value,onChange,placeholder,type='text',mono=false,small=false}) => (
+const C={bg:'#0b0b0b',s1:'#141414',s2:'#1c1c1c',bd:'#272727',acc:'#E85D04',txt:'#efefef',mut:'#666',grn:'#22c55e',red:'#ef4444',blu:'#3b82f6'};
+
+// ═══════════════════════════════════════════════════════════════
+//  REUSABLE COMPONENTS
+// ═══════════════════════════════════════════════════════════════
+const Field=({label,value,onChange,placeholder,type='text',mono=false,small=false,hint})=>(
   <div style={{marginBottom:12}}>
     {label&&<div style={{fontSize:11,color:C.mut,letterSpacing:1,textTransform:'uppercase',marginBottom:4}}>{label}</div>}
     <input type={type} value={value} onChange={e=>onChange(e.target.value)} placeholder={placeholder}
-      style={{width:'100%',background:C.s2,border:`1px solid ${C.bd}`,borderRadius:8,
-              padding:small?'7px 10px':'10px 12px',color:C.txt,fontSize:small?13:14,
-              fontFamily:mono?'\'Fira Code\',monospace':'inherit',outline:'none'}}/>
+      style={{width:'100%',background:C.s2,border:`1px solid ${C.bd}`,borderRadius:8,padding:small?'7px 10px':'10px 12px',color:C.txt,fontSize:small?12:14,fontFamily:mono?'\'Fira Code\',monospace':'inherit',outline:'none'}}/>
+    {hint&&<div style={{fontSize:11,color:'#555',marginTop:4,lineHeight:1.4}}>{hint}</div>}
   </div>
 );
 
-// ── Main App ──────────────────────────────────────────────────
-function App() {
-  // Core state
+const Overlay=({onClose,children,z=200})=>(
+  <div onClick={onClose} style={{position:'absolute',inset:0,background:'rgba(0,0,0,.78)',display:'flex',flexDirection:'column',justifyContent:'flex-end',zIndex:z}}>
+    <div onClick={e=>e.stopPropagation()} className="sheet" style={{background:C.s1,borderRadius:'18px 18px 0 0',padding:'20px 16px 36px',border:`1px solid ${C.bd}`,maxHeight:'90vh',overflowY:'auto'}}>
+      <div style={{width:36,height:4,background:'#333',borderRadius:2,margin:'0 auto 18px'}}/>
+      {children}
+    </div>
+  </div>
+);
+
+// ═══════════════════════════════════════════════════════════════
+//  APP
+// ═══════════════════════════════════════════════════════════════
+function App(){
+  // Core
   const [userName,  setUserName]  = useState('');
   const [nameSet,   setNameSet]   = useState(false);
   const [isAdmin,   setIsAdmin]   = useState(false);
   const [items,     setItems]     = useState([]);
   const [loading,   setLoading]   = useState(true);
-  const [loadErr,   setLoadErr]   = useState(false);
   const [checked,   setChecked]   = useState({});
   const [view,      setView]      = useState('list');
   const [cat,       setCat]       = useState('Efnavörur');
@@ -122,94 +152,184 @@ function App() {
   const [modal,     setModal]     = useState(null);
   const [toast,     setToast]     = useState(null);
   const [listening, setListening] = useState(false);
-  const [orderShare,setOrderShare]= useState(null);
 
-  // Admin state
+  // Admin
   const [ghToken,   setGhToken]   = useState('');
   const [web3Key,   setWeb3Key]   = useState('');
   const [pwInput,   setPwInput]   = useState('');
   const [pwError,   setPwError]   = useState(false);
-  const [newItem,   setNewItem]   = useState({name:'',sku:'',sup:'Kemi',cat:'Efnavörur',qty:''});
-  const [saving,    setSaving]    = useState(false);
   const [newPw,     setNewPw]     = useState('');
+  const [saving,    setSaving]    = useState(false);
 
-  // Photo state
+  // Item CRUD
+  const [newItem,   setNewItem]   = useState({name:'',sku:'',sup:'Kemi',cat:'Efnavörur',qty:''});
+  const [editItem,  setEditItem]  = useState(null);
+  const [delId,     setDelId]     = useState(null);
+
+  // Photo
   const photoRef  = useRef(null);
-  const [photoFile,   setPhotoFile]   = useState(null);
-  const [photoPreview,setPhotoPreview]= useState(null);
-  const [photoDesc,   setPhotoDesc]   = useState('');
-  const [photoSending,setPhotoSending]= useState(false);
-  const [photoErr,    setPhotoErr]    = useState(null);
+  const [photoFile,    setPhotoFile]    = useState(null);
+  const [photoPreview, setPhotoPreview] = useState(null);
+  const [photoDesc,    setPhotoDesc]    = useState('');
+  const [photoSending, setPhotoSending] = useState(false);
+  const [photoErr,     setPhotoErr]     = useState(null);
 
-  // ── Init ────────────────────────────────────────────────────
+  // Notification
+  const [notifSending, setNotifSending] = useState(false);
+  const [notifDone,    setNotifDone]    = useState(false);
+
+  // Order share
+  const [orderShare, setOrderShare] = useState(null);
+
+  // ── Init ─────────────────────────────────────────────────────
   useEffect(()=>{
-    const n = localStorage.getItem('vrkst-name');
-    if(n){ setUserName(n); setNameSet(true); }
-    const sv = localStorage.getItem('vrkst-checked');
+    const n=localStorage.getItem('vrkst-name');
+    if(n){setUserName(n);setNameSet(true);}
+    const sv=localStorage.getItem('vrkst-checked');
     if(sv) setChecked(JSON.parse(sv));
-    const tk = localStorage.getItem('vrkst-token');
-    if(tk) setGhToken(tk);
-    const w3 = localStorage.getItem('vrkst-w3key');
-    if(w3) setWeb3Key(w3);
-    const ca = localStorage.getItem('vrkst-items');
-    if(ca) setItems(JSON.parse(ca));
+    const tk=localStorage.getItem('vrkst-token'); if(tk) setGhToken(tk);
+    const w3=localStorage.getItem('vrkst-w3key');  if(w3) setWeb3Key(w3);
+    const ca=localStorage.getItem('vrkst-items');  if(ca) setItems(JSON.parse(ca));
     fetchItems();
   },[]);
+  useEffect(()=>{try{localStorage.setItem('vrkst-checked',JSON.stringify(checked));}catch{}},[checked]);
 
-  useEffect(()=>{ try{localStorage.setItem('vrkst-checked',JSON.stringify(checked));}catch{} },[checked]);
-
-  // ── Fetch items ─────────────────────────────────────────────
-  const fetchItems = async () => {
-    setLoading(true); setLoadErr(false);
-    try {
-      const res = await fetch(`${RAW_URL}?t=${Date.now()}`);
+  // ── Fetch items from GitHub ───────────────────────────────────
+  const fetchItems=async()=>{
+    setLoading(true);
+    try{
+      const res=await fetch(`${RAW_URL}?t=${Date.now()}`);
       if(!res.ok) throw new Error();
-      const data = await res.json();
+      const data=await res.json();
       setItems(data);
       localStorage.setItem('vrkst-items',JSON.stringify(data));
-    } catch {
-      if(!localStorage.getItem('vrkst-items')) setLoadErr(true);
-    } finally { setLoading(false); }
+    }catch{}
+    finally{setLoading(false);}
   };
 
-  // ── Add item via GitHub API ──────────────────────────────────
-  const saveItem = async () => {
+  // ── GitHub commit helper ──────────────────────────────────────
+  const commit=async(newItems,msg)=>{
+    if(!ghToken) throw new Error('GitHub token vantar — settu inn í stillingar');
+    const updated=await githubCommit(ghToken,newItems,msg);
+    setItems(updated);
+    localStorage.setItem('vrkst-items',JSON.stringify(updated));
+    return updated;
+  };
+
+  // ── Add item ──────────────────────────────────────────────────
+  const addItem=async()=>{
     if(!newItem.name.trim()||!newItem.qty.trim()) return showToast('Fylltu út nafn og magn');
-    if(!ghToken) return showToast('Þú þarft að setja inn GitHub token í stillingum');
     setSaving(true);
-    try {
-      const res   = await fetch(API_URL,{headers:{Authorization:`token ${ghToken}`,Accept:'application/vnd.github.v3+json'}});
-      const data  = await res.json();
-      if(!res.ok) throw new Error(data.message||'API villa');
-      const updated = [...items,{id:`u${Date.now()}`,...newItem}];
-      const content = btoa(unescape(encodeURIComponent(JSON.stringify(updated,null,2))));
-      const put = await fetch(API_URL,{method:'PUT',headers:{Authorization:`token ${ghToken}`,'Content-Type':'application/json'},
-        body:JSON.stringify({message:`Bætt við: ${newItem.name}`,content,sha:data.sha})});
-      if(!put.ok) throw new Error('commit villa');
-      setItems(updated);
-      localStorage.setItem('vrkst-items',JSON.stringify(updated));
+    try{
+      await commit([...items,{id:`u${Date.now()}`,...newItem}],`Bætt við: ${newItem.name}`);
       setNewItem({name:'',sku:'',sup:'Kemi',cat:'Efnavörur',qty:''});
       setModal(null);
-      showToast('✓ Vöru bætt við lista!');
-    } catch(e){ showToast(`Villa: ${e.message}`); }
-    finally { setSaving(false); }
+      showToast('✓ Vöru bætt við!');
+    }catch(e){showToast(`Villa: ${e.message}`);}
+    finally{setSaving(false);}
   };
 
-  // ── Admin login ──────────────────────────────────────────────
-  const loginAdmin = () => {
-    const stored = localStorage.getItem('vrkst-pw') || DEFAULT_PW;
-    if(pwInput===stored){ setIsAdmin(true); setPwError(false); setPwInput(''); }
-    else { setPwError(true); }
+  // ── Edit item ─────────────────────────────────────────────────
+  const saveEdit=async()=>{
+    if(!editItem?.name?.trim()||!editItem?.qty?.trim()) return showToast('Fylltu út nafn og magn');
+    setSaving(true);
+    try{
+      await commit(items.map(i=>i.id===editItem.id?editItem:i),`Breytti: ${editItem.name}`);
+      setEditItem(null);
+      showToast('✓ Vara uppfærð!');
+    }catch(e){showToast(`Villa: ${e.message}`);}
+    finally{setSaving(false);}
   };
 
-  // ── Toast ────────────────────────────────────────────────────
-  const showToast = msg => { setToast(msg); setTimeout(()=>setToast(null),2600); };
+  // ── Delete item ───────────────────────────────────────────────
+  const deleteItem=async(id)=>{
+    setSaving(true);
+    try{
+      await commit(items.filter(i=>i.id!==id),'Eytti vöru');
+      setChecked(p=>{const n={...p};delete n[id];return n;});
+      setDelId(null);
+      showToast('✓ Vöru eytt!');
+    }catch(e){showToast(`Villa: ${e.message}`);}
+    finally{setSaving(false);}
+  };
 
-  // ── Toggle item ──────────────────────────────────────────────
-  const toggle = useCallback(id=>setChecked(p=>({...p,[id]:!p[id]})),[]);
+  // ── Send notification to admin (user action) ──────────────────
+  const sendNotification=async()=>{
+    const key=web3Key.trim();
+    if(!key){showToast('Admin þarf að setja upp Web3Forms lykil í stillingum');return;}
+    if(!count) return;
+    setNotifSending(true);
+    try{
+      const dt=new Date().toLocaleString('is-IS');
+      const listHtml=checkedList.map(i=>`<li><b>${i.name}</b>${i.sku?` (VNR: ${i.sku})`:''} — ${i.qty}</li>`).join('');
+      const html=`<div style="font-family:sans-serif;max-width:500px;"><h2 style="color:#E85D04">📋 Pöntunarbeiðni frá ${userName}</h2><p><b>Dagsetning:</b> ${dt}</p><p><b>Vörur sem vantar (${count} stk.):</b></p><ul>${listHtml}</ul></div>`;
+      const res=await fetch('https://api.web3forms.com/submit',{
+        method:'POST',headers:{'Content-Type':'application/json','Accept':'application/json'},
+        body:JSON.stringify({access_key:key,subject:`📋 Pöntunarbeiðni frá ${userName} — ${count} vörur`,from_name:userName,message:html,html:true,botcheck:false})
+      });
+      const data=await res.json();
+      if(!data.success) throw new Error(data.message||'villa');
+      setNotifDone(true);
+    }catch(e){showToast(`Sending mistókst: ${e.message||'net villa'}`);}
+    finally{setNotifSending(false);}
+  };
 
-  // ── Voice ────────────────────────────────────────────────────
-  const startVoice = () => {
+  // ── Photo request ─────────────────────────────────────────────
+  const onPhotoChange=e=>{
+    const f=e.target.files[0];if(!f)return;
+    setPhotoFile(f);setPhotoPreview(URL.createObjectURL(f));setPhotoErr(null);setModal('photo');
+  };
+  const compressImg=(file,maxDim=350,q=0.55)=>new Promise((res,rej)=>{
+    const img=new Image();
+    img.onload=()=>{
+      let{width:w,height:h}=img;
+      if(w>maxDim||h>maxDim){const r=Math.min(maxDim/w,maxDim/h);w=Math.round(w*r);h=Math.round(h*r);}
+      const c=document.createElement('canvas');c.width=w;c.height=h;
+      c.getContext('2d').drawImage(img,0,0,w,h);
+      const b64=c.toDataURL('image/jpeg',q);
+      if(b64.length<100)rej(new Error('compress'));else res(b64);
+    };
+    img.onerror=rej;img.src=URL.createObjectURL(file);
+  });
+  const sendPhoto=async()=>{
+    const key=web3Key.trim();
+    if(!key){setPhotoErr('Admin þarf að setja upp Web3Forms lykil í stillingum (⚙️)');return;}
+    if(photoSending) return;
+    setPhotoSending(true);setPhotoErr(null);
+    try{
+      let imgTag='';
+      if(photoFile){
+        try{const b64=await compressImg(photoFile);imgTag=`<br><img src="${b64}" style="max-width:320px;border-radius:8px;margin-top:8px;"/>`;}
+        catch{imgTag='<br><i>(Mynd tókst ekki)</i>';}
+      }
+      const html=`<div style="font-family:sans-serif;max-width:500px;"><h2 style="color:#E85D04">📦 Tillaga að nýrri vöru</h2><p><b>Sendandi:</b> ${userName}</p><p><b>Dagsetning:</b> ${new Date().toLocaleString('is-IS')}</p><p><b>Lýsing:</b> ${photoDesc||'(engin lýsing)'}</p>${imgTag}</div>`;
+      const res=await fetch('https://api.web3forms.com/submit',{
+        method:'POST',headers:{'Content-Type':'application/json','Accept':'application/json'},
+        body:JSON.stringify({access_key:key,subject:`📦 Tillaga frá ${userName}`,from_name:userName,message:html,html:true,botcheck:false})
+      });
+      const data=await res.json();
+      if(!data.success) throw new Error(data.message||'villa');
+      showToast('✓ Tillaga send!');
+      resetPhoto();
+    }catch(e){setPhotoErr(`Sending mistókst: ${e.message||'net villa'}`);}
+    finally{setPhotoSending(false);}
+  };
+  const resetPhoto=()=>{setPhotoFile(null);setPhotoPreview(null);setPhotoDesc('');setPhotoErr(null);setModal(null);if(photoRef.current)photoRef.current.value='';};
+
+  // ── Order share (admin only) ───────────────────────────────────
+  const openOrderShare=(supName=null)=>{
+    const its=supName?checkedList.filter(i=>i.sup===supName):checkedList;
+    if(!its.length)return;
+    const dt=new Date().toLocaleDateString('is-IS');
+    setOrderShare({
+      to:supName?(SUP_EMAILS[supName]||ADMIN_EMAIL):ADMIN_EMAIL,
+      subject:supName?`Pöntun ${dt} – ${its.length} vörur`:`Pöntunaryfirlit ${dt} – ${count} vörur`,
+      body:buildOrderBody(its,supName)
+    });
+  };
+
+  // ── Voice ──────────────────────────────────────────────────────
+  const startVoice=()=>{
     const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
     if(!SR){showToast('Hljóðþekking er ekki studd');return;}
     const r=new SR();r.lang='is-IS';
@@ -217,114 +337,31 @@ function App() {
     r.onresult=e=>{setQuery(e.results[0][0].transcript);setAllCats(false);};r.start();
   };
 
-  // ── Photo request ────────────────────────────────────────────
-  const onPhotoChange = e => {
-    const f=e.target.files[0]; if(!f) return;
-    setPhotoFile(f);
-    setPhotoPreview(URL.createObjectURL(f));
-    setPhotoErr(null);
-    setModal('photo');
+  // ── Admin login ────────────────────────────────────────────────
+  const loginAdmin=()=>{
+    const stored=localStorage.getItem('vrkst-pw')||DEFAULT_PW;
+    if(pwInput===stored){setIsAdmin(true);setPwError(false);setPwInput('');}
+    else setPwError(true);
   };
 
-  // Þjappa mynd niður í lítið JPEG (max 350px) til að henta í tölvupóst
-  const compressImg = (file, maxDim=350, q=0.55) => new Promise((res,rej)=>{
-    const img = new Image();
-    img.onload = () => {
-      let {width:w,height:h} = img;
-      if(w>maxDim||h>maxDim){const r=Math.min(maxDim/w,maxDim/h);w=Math.round(w*r);h=Math.round(h*r);}
-      const c = document.createElement('canvas'); c.width=w; c.height=h;
-      c.getContext('2d').drawImage(img,0,0,w,h);
-      const b64 = c.toDataURL('image/jpeg',q);
-      if(b64==='data:,'||b64.length<100) rej(new Error('compress'));
-      else res(b64);
-    };
-    img.onerror = rej;
-    img.src = URL.createObjectURL(file);
-  });
+  // ── Toast ──────────────────────────────────────────────────────
+  const showToast=msg=>{setToast(msg);setTimeout(()=>setToast(null),2600);};
+  const toggle=useCallback(id=>setChecked(p=>({...p,[id]:!p[id]})),[]);
 
-  const sendPhotoRequest = async () => {
-    if(photoSending) return;
-    const key = web3Key.trim();
-    if(!key){
-      setPhotoErr('Þarf Web3Forms lykil — Admin skráir sig inn og setur lykilinn inn í stillingum (⚙️)');
-      return;
-    }
-    setPhotoSending(true); setPhotoErr(null);
-    try {
-      // Þjappa mynd og kóða sem base64 — fer beint inn í tölvupóstinn
-      let imgTag = '';
-      if(photoFile){
-        try {
-          const b64 = await compressImg(photoFile);
-          imgTag = `<br><img src="${b64}" style="max-width:320px;border-radius:8px;margin-top:8px;" />`;
-        } catch { imgTag = '<br><i>(Mynd tókst ekki að þjappa)</i>'; }
-      }
-
-      // HTML tölvupóstur — fer beint án þess að opna neitt forrit
-      const html = `
-        <div style="font-family:sans-serif;max-width:500px;">
-          <h2 style="color:#E85D04;margin-bottom:4px;">📦 Tillaga að nýrri vöru</h2>
-          <p><b>Sendandi:</b> ${userName}</p>
-          <p><b>Dagsetning:</b> ${new Date().toLocaleString('is-IS')}</p>
-          <p><b>Lýsing:</b> ${photoDesc||'(engin lýsing)'}</p>
-          ${imgTag}
-        </div>`;
-
-      const res = await fetch('https://api.web3forms.com/submit',{
-        method:'POST',
-        headers:{'Content-Type':'application/json','Accept':'application/json'},
-        body: JSON.stringify({
-          access_key: key,
-          subject: `📦 Tillaga frá ${userName}`,
-          from_name: userName,
-          message: html,
-          html: true,
-          botcheck: false
-        })
-      });
-      const data = await res.json();
-      if(!data.success) throw new Error(data.message||'web3forms villa');
-      showToast('✓ Tillaga send!');
-      resetPhoto();
-    } catch(e){
-      setPhotoErr(`Sending mistókst: ${e.message||'net villa'}`);
-    } finally {
-      setPhotoSending(false);
-    }
-  };
-
-  const resetPhoto = () => {
-    setPhotoFile(null); setPhotoPreview(null); setPhotoDesc(''); setPhotoErr(null); setModal(null);
-    if(photoRef.current) photoRef.current.value='';
-  };
-
-  // ── Order share ──────────────────────────────────────────────
-  const openShare = (supName=null) => {
-    const its = supName?checkedList.filter(i=>i.sup===supName):checkedList;
-    if(!its.length) return;
-    const dt=new Date().toLocaleDateString('is-IS');
-    setOrderShare({
-      to:supName?(SUP_EMAILS[supName]||MANAGER_EMAIL):MANAGER_EMAIL,
-      subject:supName?`Pöntun ${dt} – ${its.length} vörur`:`Pöntunaryfirlit ${dt} – ${count} vörur`,
-      body:buildBody(its,supName)
-    });
-  };
-
-  // ── Derived ─────────────────────────────────────────────────
-  const visible = useMemo(()=>{
-    let it = allCats?items:items.filter(i=>i.cat===cat);
+  // ── Derived ───────────────────────────────────────────────────
+  const visible=useMemo(()=>{
+    let it=allCats?items:items.filter(i=>i.cat===cat);
     if(supF)  it=it.filter(i=>i.sup===supF);
     if(query) it=it.filter(i=>hits(i,query));
     return it;
   },[items,cat,query,supF,allCats]);
+  const grouped    =useMemo(()=>grp(visible,'sup'),[visible]);
+  const checkedList=useMemo(()=>items.filter(i=>checked[i.id]),[items,checked]);
+  const checkedGrp =useMemo(()=>grp(checkedList,'sup'),[checkedList]);
+  const count      =checkedList.length;
+  const suppliers  =useMemo(()=>[...new Set(items.filter(i=>i.cat===cat).map(i=>i.sup))],[items,cat]);
 
-  const grouped     = useMemo(()=>grp(visible,'sup'),[visible]);
-  const checkedList = useMemo(()=>items.filter(i=>checked[i.id]),[items,checked]);
-  const checkedGrp  = useMemo(()=>grp(checkedList,'sup'),[checkedList]);
-  const count       = checkedList.length;
-  const suppliers   = useMemo(()=>[...new Set(items.filter(i=>i.cat===cat).map(i=>i.sup))],[items,cat]);
-
-  const Divider = ({label}) => (
+  const Divider=({label})=>(
     <div style={{display:'flex',alignItems:'center',padding:'8px 16px 2px',gap:8}}>
       <div style={{height:1,flex:1,background:C.bd}}/>
       <span style={{fontSize:10,color:C.mut,letterSpacing:2,textTransform:'uppercase',fontWeight:600}}>{label}</span>
@@ -332,24 +369,19 @@ function App() {
     </div>
   );
 
-  // ────────────────────────────────────────────────────────────
-  //  NAME SETUP SCREEN
-  // ────────────────────────────────────────────────────────────
-  if(!nameSet) return (
+  // ── Name setup ────────────────────────────────────────────────
+  if(!nameSet) return(
     <div style={{background:C.bg,height:'100%',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',padding:32}}>
       <div style={{fontFamily:'Oxanium,sans-serif',fontSize:32,fontWeight:700,color:C.acc,marginBottom:6}}>VERKSTÆÐIÐ</div>
       <div style={{fontSize:12,color:C.mut,letterSpacing:2,textTransform:'uppercase',marginBottom:48}}>Efnalager · Pöntunarkerfi</div>
       <div style={{width:'100%',maxWidth:320}}>
         <div style={{fontSize:18,fontWeight:600,marginBottom:6}}>Hvað heitirðu?</div>
-        <div style={{fontSize:13,color:C.mut,marginBottom:20}}>Nafnið þitt birtist þegar þú sendir inn tillögu</div>
-        <input
-          value={userName} onChange={e=>setUserName(e.target.value)}
-          onKeyDown={e=>{ if(e.key==='Enter'&&userName.trim()){ localStorage.setItem('vrkst-name',userName.trim()); setNameSet(true); }}}
-          placeholder="Nafn þitt..."
-          style={{width:'100%',background:C.s1,border:`1px solid ${C.bd}`,borderRadius:12,padding:'14px 16px',color:C.txt,fontSize:16,outline:'none',fontFamily:'inherit',marginBottom:12}}
-          autoFocus
-        />
-        <button onClick={()=>{ if(!userName.trim()) return; localStorage.setItem('vrkst-name',userName.trim()); setNameSet(true); }}
+        <div style={{fontSize:13,color:C.mut,marginBottom:20}}>Nafnið þitt birtist þegar þú sendir inn beiðni</div>
+        <input value={userName} onChange={e=>setUserName(e.target.value)}
+          onKeyDown={e=>{if(e.key==='Enter'&&userName.trim()){localStorage.setItem('vrkst-name',userName.trim());setNameSet(true);}}}
+          placeholder="Nafn þitt..." autoFocus
+          style={{width:'100%',background:C.s1,border:`1px solid ${C.bd}`,borderRadius:12,padding:'14px 16px',color:C.txt,fontSize:16,outline:'none',fontFamily:'inherit',marginBottom:12}}/>
+        <button onClick={()=>{if(!userName.trim())return;localStorage.setItem('vrkst-name',userName.trim());setNameSet(true);}}
           className="tap" style={{width:'100%',padding:14,borderRadius:12,border:'none',background:userName.trim()?C.acc:'#222',color:'#fff',fontSize:15,fontWeight:600,cursor:'pointer'}}>
           Áfram →
         </button>
@@ -357,29 +389,33 @@ function App() {
     </div>
   );
 
-  // ────────────────────────────────────────────────────────────
+  // ════════════════════════════════════════════════════════════════
   //  MAIN APP
-  // ────────────────────────────────────────────────────────────
-  return (
+  // ════════════════════════════════════════════════════════════════
+  return(
     <div style={{background:C.bg,color:C.txt,height:'100%',maxWidth:480,margin:'0 auto',display:'flex',flexDirection:'column',overflow:'hidden',position:'relative'}}>
 
-      {/* ── Header ── */}
+      {/* HEADER */}
       <div style={{padding:'12px 16px 10px',borderBottom:`1px solid ${C.bd}`,flexShrink:0}}>
         <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:10}}>
           <div>
             <div style={{fontFamily:'Oxanium,sans-serif',fontSize:24,fontWeight:700,color:C.acc,letterSpacing:1,lineHeight:1}}>VERKSTÆÐIÐ</div>
             <div style={{fontSize:10,color:C.mut,letterSpacing:1.5,textTransform:'uppercase',marginTop:1}}>
-              {userName} {isAdmin&&<span style={{color:C.acc}}>· Admin</span>}
+              {userName} {isAdmin&&<span style={{color:C.acc,fontWeight:700}}>· Admin</span>}
+              {!isAdmin&&count>0&&<span style={{color:C.grn}}> · {count} valdar</span>}
             </div>
           </div>
-          <div style={{display:'flex',alignItems:'center',gap:8}}>
-            {count>0&&<div style={{background:C.acc,color:'#fff',borderRadius:20,padding:'3px 10px',fontSize:13,fontWeight:600,display:'flex',alignItems:'center',gap:4}}><ICart s={13} c="#fff"/> {count}</div>}
+          <div style={{display:'flex',gap:8,alignItems:'center'}}>
+            {isAdmin&&count>0&&(
+              <div style={{background:C.acc,color:'#fff',borderRadius:20,padding:'3px 10px',fontSize:13,fontWeight:600,display:'flex',alignItems:'center',gap:4}}>
+                <ICart s={13} c="#fff"/> {count}
+              </div>
+            )}
             <button onClick={()=>setModal('settings')} className="tap" style={{background:'none',border:'none',color:C.mut,cursor:'pointer',padding:4,display:'flex'}}>
-              <IGear s={20} c={C.mut}/>
+              <IGear s={20} c={isAdmin?C.acc:C.mut}/>
             </button>
           </div>
         </div>
-
         {/* Search */}
         <div style={{display:'flex',gap:6}}>
           <div style={{flex:1,display:'flex',alignItems:'center',background:C.s1,border:`1px solid ${C.bd}`,borderRadius:10,padding:'8px 10px',gap:7}}>
@@ -397,10 +433,9 @@ function App() {
             <IRefresh s={14} c={C.mut} cls={loading?'spin':''}/>
           </button>
         </div>
-        {allCats&&<div className="anim" style={{marginTop:5,fontSize:11,color:'#4ade80',display:'flex',alignItems:'center',gap:5}}><IZap s={10} c="#4ade80"/>Leitar í öllum flokkum · {visible.length} fundust<button onClick={()=>setAllCats(false)} style={{background:'none',border:'none',color:C.mut,cursor:'pointer',fontSize:11,padding:0,marginLeft:4}}>hreinsa</button></div>}
       </div>
 
-      {/* Filters */}
+      {/* CATEGORY / SUPPLIER FILTERS */}
       {view==='list'&&(
         <div style={{padding:'8px 16px',borderBottom:`1px solid ${C.bd}`,flexShrink:0}}>
           <div style={{display:'flex',gap:6,marginBottom:7}}>
@@ -411,69 +446,79 @@ function App() {
               </button>
             ))}
           </div>
-          {!allCats&&<div className="hscroll">
-            {['',...suppliers].map(s=>(
-              <button key={s||'all'} className="tap" onClick={()=>setSupF(supF===s?'':s)}
-                style={{padding:'3px 9px',borderRadius:12,fontSize:11,whiteSpace:'nowrap',fontFamily:'inherit',cursor:'pointer',border:`1px solid ${supF===s?C.acc:C.bd}`,background:supF===s?'rgba(232,93,4,.12)':'transparent',color:supF===s?C.acc:C.mut}}>
-                {s||'Allar'}
-              </button>
-            ))}
-          </div>}
+          {!allCats&&(
+            <div className="hscroll">
+              {['',...(Array.isArray(suppliers)?suppliers:[])].map(s=>(
+                <button key={s||'all'} className="tap" onClick={()=>setSupF(supF===s?'':s)}
+                  style={{padding:'3px 9px',borderRadius:12,fontSize:11,whiteSpace:'nowrap',fontFamily:'inherit',cursor:'pointer',border:`1px solid ${supF===s?C.acc:C.bd}`,background:supF===s?'rgba(232,93,4,.12)':'transparent',color:supF===s?C.acc:C.mut}}>
+                  {s||'Allar'}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
-      {/* Scroll area */}
+      {/* SCROLL AREA */}
       <div style={{flex:1,overflowY:'auto'}}>
 
-        {/* LIST VIEW */}
+        {/* ═══ LIST VIEW ═══ */}
         {view==='list'&&(
           <>
             {loading&&items.length===0&&(
               <div style={{textAlign:'center',padding:'60px 20px',color:C.mut}}>
-                <IRefresh s={32} c={C.mut} cls="spin" style={{opacity:.3}}/>
+                <IRefresh s={32} c={C.mut} cls="spin" st={{opacity:.3}}/>
                 <div style={{fontSize:14,marginTop:12}}>Sæki vörulista...</div>
-              </div>
-            )}
-            {loadErr&&(
-              <div style={{textAlign:'center',padding:'40px 20px',color:C.mut}}>
-                <div style={{fontSize:14}}>Gat ekki tengst GitHub</div>
-                <button onClick={fetchItems} className="tap" style={{marginTop:12,padding:'8px 16px',borderRadius:8,border:`1px solid ${C.bd}`,background:'none',color:C.acc,fontSize:13,cursor:'pointer',fontFamily:'inherit'}}>Reyna aftur</button>
-              </div>
-            )}
-            {!loading&&Object.keys(grouped).length===0&&query&&(
-              <div style={{textAlign:'center',padding:'60px 20px',color:C.mut}}>
-                <IBox s={36} c={C.mut} style={{opacity:.15}}/>
-                <div style={{fontSize:14,marginTop:12}}>Engar vörur fundust</div>
               </div>
             )}
             {Object.entries(grouped).map(([sup,its])=>(
               <div key={sup}>
                 <Divider label={sup}/>
                 {its.map(item=>(
-                  <div key={item.id} className="tap" onClick={()=>toggle(item.id)}
-                    style={{display:'flex',alignItems:'center',gap:11,padding:'10px 16px',background:checked[item.id]?'rgba(34,197,94,.05)':'transparent',borderLeft:checked[item.id]?`3px solid ${C.grn}`:'3px solid transparent'}}>
-                    <div style={{width:21,height:21,borderRadius:6,flexShrink:0,border:`2px solid ${checked[item.id]?C.grn:'#3a3a3a'}`,background:checked[item.id]?C.grn:'transparent',display:'flex',alignItems:'center',justifyContent:'center',transition:'all .15s'}}>
+                  <div key={item.id} style={{display:'flex',alignItems:'center',padding:'10px 16px',gap:11,
+                    background:checked[item.id]?'rgba(34,197,94,.05)':'transparent',
+                    borderLeft:checked[item.id]?`3px solid ${C.grn}`:'3px solid transparent'}}>
+                    {/* Checkbox */}
+                    <div onClick={()=>toggle(item.id)} className="tap"
+                      style={{width:21,height:21,borderRadius:6,flexShrink:0,cursor:'pointer',
+                              border:`2px solid ${checked[item.id]?C.grn:'#3a3a3a'}`,
+                              background:checked[item.id]?C.grn:'transparent',
+                              display:'flex',alignItems:'center',justifyContent:'center',transition:'all .15s'}}>
                       {checked[item.id]&&<ICheck s={12} c="#fff"/>}
                     </div>
-                    <div style={{flex:1,minWidth:0}}>
+                    {/* Text */}
+                    <div onClick={()=>toggle(item.id)} className="tap" style={{flex:1,minWidth:0,cursor:'pointer'}}>
                       <div style={{fontSize:14,fontWeight:500,color:checked[item.id]?'#444':C.txt,textDecoration:checked[item.id]?'line-through':'none',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{item.name}</div>
                       <div style={{fontSize:10,color:'#3d3d3d',marginTop:1,fontFamily:"'Fira Code',monospace",display:'flex',gap:8}}>
                         {item.sku&&<span>#{item.sku}</span>}<span>→ {item.qty}</span>
                       </div>
                     </div>
+                    {/* Admin CRUD buttons */}
+                    {isAdmin&&(
+                      <div style={{display:'flex',gap:4,flexShrink:0}}>
+                        <button onClick={()=>setEditItem({...item})} className="tap"
+                          style={{background:'none',border:'none',cursor:'pointer',padding:6,display:'flex',color:'#555'}}>
+                          <IEdit s={14} c="#555"/>
+                        </button>
+                        <button onClick={()=>setDelId(item.id)} className="tap"
+                          style={{background:'none',border:'none',cursor:'pointer',padding:6,display:'flex',color:'#555'}}>
+                          <ITrash s={14} c="#555"/>
+                        </button>
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
             ))}
-            <div style={{height:100}}/>
+            <div style={{height:isAdmin?80:count>0?120:80}}/>
           </>
         )}
 
-        {/* ORDER VIEW */}
-        {view==='order'&&(
+        {/* ═══ ORDER VIEW (admin only) ═══ */}
+        {view==='order'&&isAdmin&&(
           <>
             {count===0
-              ?<div style={{textAlign:'center',padding:'80px 20px',color:C.mut}}><ICart s={48} c={C.mut} style={{opacity:.12}}/><div style={{fontSize:16,marginTop:14}}>Pöntunin er tóm</div><div style={{fontSize:13,marginTop:7}}>Farðu á lagerlista og hakaðu við vörur</div></div>
+              ?<div style={{textAlign:'center',padding:'80px 20px',color:C.mut}}><ICart s={48} c={C.mut} st={{opacity:.12}}/><div style={{fontSize:16,marginTop:14}}>Pöntunin er tóm</div><div style={{fontSize:13,marginTop:7}}>Farðu á lagerlista og hakaðu við vörur</div></div>
               :(
                 <>
                   {Object.entries(checkedGrp).map(([sup,its])=>(
@@ -483,7 +528,7 @@ function App() {
                           <div style={{fontWeight:600,fontSize:14}}>{sup}</div>
                           {SUP_EMAILS[sup]&&<div style={{fontSize:10,color:C.mut,fontFamily:"'Fira Code',monospace",marginTop:1}}>{SUP_EMAILS[sup]}</div>}
                         </div>
-                        <button onClick={()=>openShare(sup)} className="tap" style={{background:'rgba(232,93,4,.1)',border:'1px solid rgba(232,93,4,.25)',color:C.acc,padding:'5px 11px',borderRadius:8,fontSize:11,fontWeight:600,cursor:'pointer',display:'flex',alignItems:'center',gap:4,fontFamily:'inherit'}}>
+                        <button onClick={()=>openOrderShare(sup)} className="tap" style={{background:'rgba(232,93,4,.1)',border:'1px solid rgba(232,93,4,.25)',color:C.acc,padding:'5px 11px',borderRadius:8,fontSize:11,fontWeight:600,cursor:'pointer',display:'flex',alignItems:'center',gap:4,fontFamily:'inherit'}}>
                           <IMail s={11} c={C.acc}/> Senda
                         </button>
                       </div>
@@ -499,14 +544,14 @@ function App() {
                     </div>
                   ))}
                   <div style={{padding:'16px',display:'flex',flexDirection:'column',gap:8}}>
-                    <button onClick={()=>openShare()} className="tap" style={{width:'100%',padding:14,borderRadius:12,border:'none',background:C.acc,color:'#fff',fontSize:14,fontWeight:600,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:8,fontFamily:'inherit'}}>
+                    <button onClick={()=>openOrderShare()} className="tap" style={{width:'100%',padding:14,borderRadius:12,border:'none',background:C.acc,color:'#fff',fontSize:14,fontWeight:600,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:8,fontFamily:'inherit'}}>
                       <IMail s={16} c="#fff"/> Senda yfirlit til mín · {count} vörur
                     </button>
                     <button onClick={()=>{setChecked({});showToast('Pöntun hreinsuð');}} className="tap" style={{width:'100%',padding:12,borderRadius:12,background:'transparent',border:`1px solid #2a2a2a`,color:C.mut,fontSize:13,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:7,fontFamily:'inherit'}}>
                       <ITrash s={13} c={C.mut}/> Hreinsa allt
                     </button>
                   </div>
-                  <div style={{height:100}}/>
+                  <div style={{height:80}}/>
                 </>
               )
             }
@@ -514,173 +559,240 @@ function App() {
         )}
       </div>
 
-      {/* Bottom nav */}
+      {/* BOTTOM NAV */}
       <div style={{display:'flex',borderTop:`1px solid ${C.bd}`,flexShrink:0}}>
-        {[{id:'list',label:'Lager',I:IBox},{id:'order',label:`Pöntun${count>0?` (${count})`:''}`,I:ICart}].map(({id,label,I})=>(
-          <button key={id} onClick={()=>setView(id)} className="tap" style={{flex:1,padding:'11px 8px',border:'none',background:'transparent',color:view===id?C.acc:C.mut,borderTop:view===id?`2px solid ${C.acc}`:'2px solid transparent',display:'flex',flexDirection:'column',alignItems:'center',gap:3,cursor:'pointer',marginTop:-1,fontFamily:'inherit'}}>
-            <I s={18} c={view===id?C.acc:C.mut}/><span style={{fontSize:11,fontWeight:view===id?600:400}}>{label}</span>
+        {/* Lager tab — allir */}
+        <button onClick={()=>setView('list')} className="tap" style={{flex:1,padding:'11px 8px',border:'none',background:'transparent',color:view==='list'?C.acc:C.mut,borderTop:view==='list'?`2px solid ${C.acc}`:'2px solid transparent',display:'flex',flexDirection:'column',alignItems:'center',gap:3,cursor:'pointer',marginTop:-1,fontFamily:'inherit'}}>
+          <IBox s={18} c={view==='list'?C.acc:C.mut}/>
+          <span style={{fontSize:11,fontWeight:view==='list'?600:400}}>Lager</span>
+        </button>
+        {/* Pöntun tab — aðeins admin */}
+        {isAdmin&&(
+          <button onClick={()=>setView('order')} className="tap" style={{flex:1,padding:'11px 8px',border:'none',background:'transparent',color:view==='order'?C.acc:C.mut,borderTop:view==='order'?`2px solid ${C.acc}`:'2px solid transparent',display:'flex',flexDirection:'column',alignItems:'center',gap:3,cursor:'pointer',marginTop:-1,fontFamily:'inherit'}}>
+            <ICart s={18} c={view==='order'?C.acc:C.mut}/>
+            <span style={{fontSize:11,fontWeight:view==='order'?600:400}}>Pöntun{count>0?` (${count})`:''}</span>
           </button>
-        ))}
+        )}
       </div>
 
-      {/* ── FAB: Tillaga ── */}
+      {/* ═══ FLOATING BUTTONS ═══ */}
+
+      {/* Tillaga að vöru — allir */}
       <input ref={photoRef} type="file" accept="image/*" capture="environment" style={{display:'none'}} onChange={onPhotoChange}/>
       <button onClick={()=>photoRef.current&&photoRef.current.click()} className="tap"
-        style={{position:'absolute',bottom:72,right:16,background:C.s1,border:`1px solid ${C.bd}`,borderRadius:14,padding:'10px 14px',display:'flex',alignItems:'center',gap:8,cursor:'pointer',boxShadow:'0 4px 16px rgba(0,0,0,.5)',zIndex:10}}>
-        <ICamera s={17} c={C.acc}/>
+        style={{position:'absolute',right:16,bottom:isAdmin?74:count>0?130:74,
+          background:C.s1,border:`1px solid ${C.bd}`,borderRadius:14,padding:'9px 13px',
+          display:'flex',alignItems:'center',gap:7,cursor:'pointer',boxShadow:'0 4px 16px rgba(0,0,0,.5)',zIndex:10}}>
+        <ICamera s={16} c={C.acc}/>
         <span style={{fontSize:12,fontWeight:600,color:C.txt,whiteSpace:'nowrap'}}>Senda inn tillögu af vöru</span>
       </button>
 
-      {/* ══════════════════════════════════════════════════════
-          MODALS
-      ══════════════════════════════════════════════════════ */}
-
-      {/* ── Settings modal ── */}
-      {modal==='settings'&&(
-        <div onClick={()=>setModal(null)} style={{position:'absolute',inset:0,background:'rgba(0,0,0,.75)',display:'flex',flexDirection:'column',justifyContent:'flex-end',zIndex:200}}>
-          <div onClick={e=>e.stopPropagation()} className="sheet" style={{background:C.s1,borderRadius:'18px 18px 0 0',padding:'20px 16px 36px',border:`1px solid ${C.bd}`,maxHeight:'85vh',overflowY:'auto'}}>
-            <div style={{width:36,height:4,background:'#333',borderRadius:2,margin:'0 auto 20px'}}/>
-
-            {/* User section */}
-            <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:16}}>
-              <div style={{width:36,height:36,borderRadius:'50%',background:C.acc,display:'flex',alignItems:'center',justifyContent:'center'}}><IUser s={18} c="#fff"/></div>
-              <div style={{flex:1}}>
-                <div style={{fontSize:13,fontWeight:600}}>{userName}</div>
-                <div style={{fontSize:11,color:C.mut}}>Notandi</div>
-              </div>
-            </div>
-            <Field label="Breyta nafni" value={userName} onChange={v=>{setUserName(v);localStorage.setItem('vrkst-name',v);}} placeholder="Nafn þitt"/>
-
-            <div style={{height:1,background:C.bd,margin:'16px 0'}}/>
-
-            {/* Admin section */}
-            {!isAdmin?(
-              <div>
-                <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:12}}>
-                  <ILock s={16} c={C.mut}/><span style={{fontSize:13,color:C.mut,fontWeight:500}}>Admin innskráning</span>
-                </div>
-                <Field label="Lykilorð" value={pwInput} onChange={setPwInput} placeholder="Admin lykilorð" type="password"/>
-                {pwError&&<div style={{fontSize:12,color:C.red,marginBottom:8,marginTop:-8}}>Rangt lykilorð</div>}
-                <button onClick={loginAdmin} className="tap" style={{width:'100%',padding:11,borderRadius:10,border:'none',background:C.acc,color:'#fff',fontSize:13,fontWeight:600,cursor:'pointer',fontFamily:'inherit'}}>
-                  Skrá inn sem Admin
-                </button>
-              </div>
-            ):(
-              <div>
-                <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:14}}>
-                  <IKey s={16} c={C.acc}/><span style={{fontSize:13,color:C.acc,fontWeight:600}}>Admin stillingar</span>
-                  <button onClick={()=>setIsAdmin(false)} style={{marginLeft:'auto',background:'none',border:'none',color:C.mut,cursor:'pointer',fontSize:11,padding:'4px 8px',borderRadius:6,fontFamily:'inherit'}}>Útskrá</button>
-                </div>
-
-                <Field label="Nýtt lykilorð (valfrjálst)" value={newPw} onChange={setNewPw} placeholder="Slá inn til að breyta" type="password"/>
-                {newPw&&<button onClick={()=>{localStorage.setItem('vrkst-pw',newPw);setNewPw('');showToast('Lykilorð breytt!');}} className="tap" style={{width:'100%',padding:9,borderRadius:8,border:`1px solid ${C.bd}`,background:'none',color:C.txt,fontSize:12,cursor:'pointer',fontFamily:'inherit',marginBottom:12}}>Vista lykilorð</button>}
-
-                <div style={{height:1,background:C.bd,margin:'4px 0 12px'}}/>
-
-                <div style={{fontSize:11,color:C.mut,marginBottom:4}}>WEB3FORMS LYKILL (fyrir mynda-tillögur)</div>
-                <div style={{fontSize:11,color:'#555',marginBottom:8,lineHeight:1.5}}>
-                  1. Farðu á <b style={{color:C.acc}}>web3forms.com</b> → sláðu inn {MANAGER_EMAIL} → smelltu "Create Access Key"<br/>
-                  2. Þú færð lykilinn í tölvupósti (1 mín) — límdu hann hér:
-                </div>
-                <Field value={web3Key} onChange={v=>{setWeb3Key(v);localStorage.setItem('vrkst-w3key',v);}} placeholder="0770fd86-83a6-48ce-ac8f-ff2087194e50" mono small/>
-                {web3Key&&<div style={{fontSize:11,color:C.grn,marginBottom:10,marginTop:-8}}>✓ Lykill vistaður — mynda-tillögur virka núna</div>}
-
-                <div style={{height:1,background:C.bd,margin:'4px 0 12px'}}/>
-
-                <div style={{fontSize:11,color:C.mut,marginBottom:6}}>GITHUB TOKEN (til að bæta við vörum)</div>
-                <div style={{fontSize:11,color:'#555',marginBottom:8,lineHeight:1.5}}>
-                  github.com → Settings → Developer settings → Personal access tokens → Generate (Contents: Read & Write)
-                </div>
-                <Field value={ghToken} onChange={v=>{setGhToken(v);localStorage.setItem('vrkst-token',v);}} placeholder="ghp_xxxxxxxxxxxx" mono small/>
-
-                <button onClick={()=>{setModal('addItem');}} className="tap" style={{width:'100%',padding:12,borderRadius:10,border:'none',background:C.acc,color:'#fff',fontSize:13,fontWeight:600,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:8,fontFamily:'inherit',marginTop:4}}>
-                  <IPlus s={15} c="#fff"/> Bæta við nýrri vöru
-                </button>
-              </div>
-            )}
-          </div>
+      {/* Láta vita — notendur (ekki admin) þegar vörur eru valdar */}
+      {!isAdmin&&count>0&&(
+        <div className="anim" style={{position:'absolute',bottom:74,left:16,right:16,zIndex:20}}>
+          <button onClick={sendNotification} disabled={notifSending} className="tap"
+            style={{width:'100%',padding:'14px',borderRadius:14,border:'none',
+              background:notifSending?'#2a2a2a':C.acc,color:'#fff',fontSize:15,fontWeight:700,
+              cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',
+              gap:9,boxShadow:'0 4px 20px rgba(232,93,4,.35)',fontFamily:'inherit'}}>
+            {notifSending?<><IRefresh s={17} c="#fff" cls="spin"/>Sendi...</>:<><IBell s={17} c="#fff"/>Láta vita · {count} vörur</>}
+          </button>
         </div>
       )}
 
-      {/* ── Add item modal ── */}
-      {modal==='addItem'&&(
-        <div onClick={()=>setModal('settings')} style={{position:'absolute',inset:0,background:'rgba(0,0,0,.75)',display:'flex',flexDirection:'column',justifyContent:'flex-end',zIndex:210}}>
-          <div onClick={e=>e.stopPropagation()} className="sheet" style={{background:C.s1,borderRadius:'18px 18px 0 0',padding:'20px 16px 36px',border:`1px solid ${C.bd}`}}>
-            <div style={{width:36,height:4,background:'#333',borderRadius:2,margin:'0 auto 16px'}}/>
-            <div style={{fontWeight:700,fontSize:17,marginBottom:16}}>Bæta við vöru</div>
+      {/* Admin: bæta við vöru FAB */}
+      {isAdmin&&(
+        <button onClick={()=>setModal('addItem')} className="tap"
+          style={{position:'absolute',left:16,bottom:74,background:C.s1,border:`1px solid ${C.bd}`,
+            borderRadius:14,padding:'9px 13px',display:'flex',alignItems:'center',gap:7,
+            cursor:'pointer',boxShadow:'0 4px 16px rgba(0,0,0,.5)',zIndex:10}}>
+          <IPlus s={16} c={C.acc}/>
+          <span style={{fontSize:12,fontWeight:600,color:C.txt}}>Bæta við vöru</span>
+        </button>
+      )}
 
-            <Field label="Nafn vöru *" value={newItem.name} onChange={v=>setNewItem(p=>({...p,name:v}))} placeholder="t.d. WD-40 sprey"/>
-            <Field label="Vörunúmer (SKU)" value={newItem.sku} onChange={v=>setNewItem(p=>({...p,sku:v}))} placeholder="t.d. wd40-400" mono/>
+      {/* ═══════════════════════════════════════════════════════════
+          MODALS
+      ═══════════════════════════════════════════════════════════ */}
 
-            <div style={{marginBottom:12}}>
-              <div style={{fontSize:11,color:C.mut,letterSpacing:1,textTransform:'uppercase',marginBottom:4}}>Flokkur</div>
-              <div style={{display:'flex',gap:8}}>
-                {['Efnavörur','Perur'].map(c=>(
-                  <button key={c} onClick={()=>setNewItem(p=>({...p,cat:c}))} className="tap"
-                    style={{flex:1,padding:'8px',borderRadius:8,border:`1px solid ${newItem.cat===c?C.acc:C.bd}`,background:newItem.cat===c?'rgba(232,93,4,.12)':'transparent',color:newItem.cat===c?C.acc:C.mut,fontSize:13,cursor:'pointer',fontFamily:'inherit'}}>
-                    {c}
-                  </button>
-                ))}
+      {/* SETTINGS */}
+      {modal==='settings'&&(
+        <Overlay onClose={()=>setModal(null)}>
+          {/* User section */}
+          <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:14}}>
+            <div style={{width:38,height:38,borderRadius:'50%',background:isAdmin?C.acc:C.s2,border:`2px solid ${isAdmin?C.acc:C.bd}`,display:'flex',alignItems:'center',justifyContent:'center'}}>
+              {isAdmin?<IShield s={18} c="#fff"/>:<IUser s={18} c={C.mut}/>}
+            </div>
+            <div>
+              <div style={{fontSize:14,fontWeight:600}}>{userName}</div>
+              <div style={{fontSize:11,color:isAdmin?C.acc:C.mut}}>{isAdmin?'Admin':'Notandi'}</div>
+            </div>
+          </div>
+          <Field label="Breyta nafni" value={userName} onChange={v=>{setUserName(v);localStorage.setItem('vrkst-name',v);}} placeholder="Nafn þitt" small/>
+
+          <div style={{height:1,background:C.bd,margin:'14px 0'}}/>
+
+          {!isAdmin?(
+            <div>
+              <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:12}}>
+                <ILock s={15} c={C.mut}/><span style={{fontSize:13,color:C.mut,fontWeight:500}}>Admin innskráning</span>
               </div>
+              <Field label="Lykilorð" value={pwInput} onChange={setPwInput} placeholder="Admin lykilorð" type="password" small/>
+              {pwError&&<div style={{fontSize:12,color:C.red,marginBottom:8,marginTop:-8}}>Rangt lykilorð</div>}
+              <button onClick={loginAdmin} className="tap" style={{width:'100%',padding:11,borderRadius:10,border:'none',background:C.acc,color:'#fff',fontSize:13,fontWeight:600,cursor:'pointer',fontFamily:'inherit'}}>
+                Skrá inn sem Admin
+              </button>
             </div>
+          ):(
+            <div>
+              <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:14}}>
+                <IKey s={15} c={C.acc}/><span style={{fontSize:13,color:C.acc,fontWeight:600}}>Admin stillingar</span>
+                <button onClick={()=>setIsAdmin(false)} style={{marginLeft:'auto',background:'none',border:'none',color:C.mut,cursor:'pointer',fontSize:11,padding:'4px 8px',borderRadius:6,fontFamily:'inherit'}}>Útskrá</button>
+              </div>
 
-            <div style={{marginBottom:12}}>
-              <div style={{fontSize:11,color:C.mut,letterSpacing:1,textTransform:'uppercase',marginBottom:4}}>Birgir</div>
-              <select value={newItem.sup} onChange={e=>setNewItem(p=>({...p,sup:e.target.value}))}
-                style={{width:'100%',background:C.s2,border:`1px solid ${C.bd}`,borderRadius:8,padding:'10px 12px',color:C.txt,fontSize:14,fontFamily:'inherit',outline:'none'}}>
-                {ALL_SUPS.map(s=><option key={s} value={s}>{s}</option>)}
-              </select>
+              {/* Password change */}
+              <Field label="Nýtt lykilorð" value={newPw} onChange={setNewPw} placeholder="Skipta um lykilorð" type="password" small/>
+              {newPw&&<button onClick={()=>{localStorage.setItem('vrkst-pw',newPw);setNewPw('');showToast('✓ Lykilorð breytt!');}} className="tap" style={{width:'100%',padding:8,borderRadius:8,border:`1px solid ${C.bd}`,background:'none',color:C.txt,fontSize:12,cursor:'pointer',fontFamily:'inherit',marginTop:-8,marginBottom:12}}>Vista lykilorð</button>}
+
+              <div style={{height:1,background:C.bd,margin:'4px 0 12px'}}/>
+
+              {/* Web3Forms key */}
+              <Field label="Web3Forms lykill (mynda-tillögur & láta vita)"
+                value={web3Key} onChange={v=>{setWeb3Key(v);localStorage.setItem('vrkst-w3key',v);}}
+                placeholder="0770fd86-83a6-48ce-ac8f-ff2087194e50" mono small
+                hint={web3Key?null:'web3forms.com → settu inn atlireynir@gmail.com → þú færð lykil í tölvupósti'}/>
+              {web3Key&&<div style={{fontSize:11,color:C.grn,marginBottom:12,marginTop:-8}}>✓ Lykill virkur</div>}
+
+              <div style={{height:1,background:C.bd,margin:'4px 0 12px'}}/>
+
+              {/* GitHub token */}
+              <Field label="GitHub token (til að breyta vörulista)"
+                value={ghToken} onChange={v=>{setGhToken(v);localStorage.setItem('vrkst-token',v);}}
+                placeholder="ghp_xxxxxxxxxxxx" mono small
+                hint={ghToken?null:'github.com → Settings → Developer settings → Tokens (classic) → Generate (repo scope)'}/>
+              {ghToken&&<div style={{fontSize:11,color:C.grn,marginBottom:12,marginTop:-8}}>✓ Token virkur</div>}
             </div>
+          )}
+        </Overlay>
+      )}
 
-            <Field label="Pöntunarmagn *" value={newItem.qty} onChange={v=>setNewItem(p=>({...p,qty:v}))} placeholder="t.d. 2 brúsar"/>
+      {/* ADD ITEM (admin) */}
+      {modal==='addItem'&&(
+        <Overlay onClose={()=>setModal(null)} z={210}>
+          <div style={{fontWeight:700,fontSize:17,marginBottom:16}}>Bæta við vöru</div>
+          <Field label="Nafn vöru *" value={newItem.name} onChange={v=>setNewItem(p=>({...p,name:v}))} placeholder="t.d. WD-40 sprey"/>
+          <Field label="Vörunúmer (SKU)" value={newItem.sku} onChange={v=>setNewItem(p=>({...p,sku:v}))} placeholder="t.d. wd40-400" mono/>
+          <div style={{marginBottom:12}}>
+            <div style={{fontSize:11,color:C.mut,letterSpacing:1,textTransform:'uppercase',marginBottom:4}}>Flokkur</div>
+            <div style={{display:'flex',gap:8}}>
+              {['Efnavörur','Perur'].map(c=>(
+                <button key={c} onClick={()=>setNewItem(p=>({...p,cat:c}))} className="tap"
+                  style={{flex:1,padding:'8px',borderRadius:8,border:`1px solid ${newItem.cat===c?C.acc:C.bd}`,background:newItem.cat===c?'rgba(232,93,4,.12)':'transparent',color:newItem.cat===c?C.acc:C.mut,fontSize:13,cursor:'pointer',fontFamily:'inherit'}}>{c}</button>
+              ))}
+            </div>
+          </div>
+          <div style={{marginBottom:12}}>
+            <div style={{fontSize:11,color:C.mut,letterSpacing:1,textTransform:'uppercase',marginBottom:4}}>Birgir</div>
+            <select value={newItem.sup} onChange={e=>setNewItem(p=>({...p,sup:e.target.value}))}
+              style={{width:'100%',background:C.s2,border:`1px solid ${C.bd}`,borderRadius:8,padding:'10px 12px',color:C.txt,fontSize:14,fontFamily:'inherit',outline:'none'}}>
+              {ALL_SUPS.map(s=><option key={s} value={s}>{s}</option>)}
+            </select>
+          </div>
+          <Field label="Pöntunarmagn *" value={newItem.qty} onChange={v=>setNewItem(p=>({...p,qty:v}))} placeholder="t.d. 2 brúsar"/>
+          <div style={{display:'flex',gap:8,marginTop:4}}>
+            <button onClick={()=>setModal(null)} className="tap" style={{flex:1,padding:12,borderRadius:10,border:`1px solid ${C.bd}`,background:'none',color:C.mut,fontSize:13,cursor:'pointer',fontFamily:'inherit'}}>Hætta við</button>
+            <button onClick={addItem} disabled={saving||!newItem.name||!newItem.qty} className="tap"
+              style={{flex:2,padding:12,borderRadius:10,border:'none',background:newItem.name&&newItem.qty?C.acc:'#333',color:'#fff',fontSize:13,fontWeight:600,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:6,fontFamily:'inherit'}}>
+              {saving?<IRefresh s={14} c="#fff" cls="spin"/>:<IPlus s={14} c="#fff"/>}
+              {saving?'Vista...':'Bæta við lista'}
+            </button>
+          </div>
+        </Overlay>
+      )}
 
-            <div style={{display:'flex',gap:8,marginTop:4}}>
-              <button onClick={()=>setModal('settings')} className="tap" style={{flex:1,padding:12,borderRadius:10,border:`1px solid ${C.bd}`,background:'none',color:C.mut,fontSize:13,cursor:'pointer',fontFamily:'inherit'}}>Hætta við</button>
-              <button onClick={saveItem} disabled={saving||!newItem.name||!newItem.qty} className="tap"
-                style={{flex:2,padding:12,borderRadius:10,border:'none',background:newItem.name&&newItem.qty?C.acc:'#333',color:'#fff',fontSize:13,fontWeight:600,cursor:'pointer',fontFamily:'inherit',display:'flex',alignItems:'center',justifyContent:'center',gap:6}}>
-                {saving?<IRefresh s={14} c="#fff" cls="spin"/>:<IPlus s={14} c="#fff"/>}
-                {saving?'Vista...':'Bæta á lista'}
+      {/* EDIT ITEM (admin) */}
+      {editItem&&(
+        <Overlay onClose={()=>setEditItem(null)} z={210}>
+          <div style={{fontWeight:700,fontSize:17,marginBottom:4}}>Breyta vöru</div>
+          <div style={{fontSize:12,color:C.mut,marginBottom:16,fontFamily:"'Fira Code',monospace"}}>#{editItem.id}</div>
+          <Field label="Nafn *" value={editItem.name} onChange={v=>setEditItem(p=>({...p,name:v}))} placeholder="Nafn vöru"/>
+          <Field label="Vörunúmer (SKU)" value={editItem.sku||''} onChange={v=>setEditItem(p=>({...p,sku:v}))} placeholder="VNR" mono/>
+          <div style={{marginBottom:12}}>
+            <div style={{fontSize:11,color:C.mut,letterSpacing:1,textTransform:'uppercase',marginBottom:4}}>Flokkur</div>
+            <div style={{display:'flex',gap:8}}>
+              {['Efnavörur','Perur'].map(c=>(
+                <button key={c} onClick={()=>setEditItem(p=>({...p,cat:c}))} className="tap"
+                  style={{flex:1,padding:'8px',borderRadius:8,border:`1px solid ${editItem.cat===c?C.acc:C.bd}`,background:editItem.cat===c?'rgba(232,93,4,.12)':'transparent',color:editItem.cat===c?C.acc:C.mut,fontSize:13,cursor:'pointer',fontFamily:'inherit'}}>{c}</button>
+              ))}
+            </div>
+          </div>
+          <div style={{marginBottom:12}}>
+            <div style={{fontSize:11,color:C.mut,letterSpacing:1,textTransform:'uppercase',marginBottom:4}}>Birgir</div>
+            <select value={editItem.sup} onChange={e=>setEditItem(p=>({...p,sup:e.target.value}))}
+              style={{width:'100%',background:C.s2,border:`1px solid ${C.bd}`,borderRadius:8,padding:'10px 12px',color:C.txt,fontSize:14,fontFamily:'inherit',outline:'none'}}>
+              {ALL_SUPS.map(s=><option key={s} value={s}>{s}</option>)}
+            </select>
+          </div>
+          <Field label="Magn *" value={editItem.qty} onChange={v=>setEditItem(p=>({...p,qty:v}))} placeholder="t.d. 2 brúsar"/>
+          <div style={{display:'flex',gap:8,marginTop:4}}>
+            <button onClick={()=>setEditItem(null)} className="tap" style={{flex:1,padding:12,borderRadius:10,border:`1px solid ${C.bd}`,background:'none',color:C.mut,fontSize:13,cursor:'pointer',fontFamily:'inherit'}}>Hætta við</button>
+            <button onClick={saveEdit} disabled={saving} className="tap"
+              style={{flex:2,padding:12,borderRadius:10,border:'none',background:C.acc,color:'#fff',fontSize:13,fontWeight:600,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:6,fontFamily:'inherit'}}>
+              {saving?<IRefresh s={14} c="#fff" cls="spin"/>:<ICheck s={14} c="#fff"/>}
+              {saving?'Vista...':'Vista breytingar'}
+            </button>
+          </div>
+        </Overlay>
+      )}
+
+      {/* DELETE CONFIRM (admin) */}
+      {delId&&(
+        <div style={{position:'absolute',inset:0,background:'rgba(0,0,0,.82)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:220,padding:24}}>
+          <div className="pop" style={{background:C.s1,borderRadius:18,padding:'28px 24px',border:`1px solid ${C.bd}`,width:'100%',maxWidth:340,textAlign:'center'}}>
+            <ITrash s={32} c={C.red} st={{marginBottom:14}}/>
+            <div style={{fontWeight:700,fontSize:17,marginBottom:8}}>Eyða vöru?</div>
+            <div style={{fontSize:13,color:C.mut,marginBottom:24,lineHeight:1.5}}>
+              {items.find(i=>i.id===delId)?.name||''}
+              <br/>Þetta er óafturkræft.
+            </div>
+            <div style={{display:'flex',gap:10}}>
+              <button onClick={()=>setDelId(null)} className="tap" style={{flex:1,padding:12,borderRadius:10,border:`1px solid ${C.bd}`,background:'none',color:C.txt,fontSize:14,cursor:'pointer',fontFamily:'inherit'}}>Hætta við</button>
+              <button onClick={()=>deleteItem(delId)} disabled={saving} className="tap"
+                style={{flex:1,padding:12,borderRadius:10,border:'none',background:C.red,color:'#fff',fontSize:14,fontWeight:600,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:6,fontFamily:'inherit'}}>
+                {saving?<IRefresh s={14} c="#fff" cls="spin"/>:null}Eyða
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* ── Photo request modal ── */}
+      {/* PHOTO SUBMISSION */}
       {modal==='photo'&&(
         <div onClick={()=>!photoSending&&resetPhoto()} style={{position:'absolute',inset:0,background:'rgba(0,0,0,.85)',display:'flex',flexDirection:'column',justifyContent:'flex-end',zIndex:200}}>
           <div onClick={e=>e.stopPropagation()} className="sheet" style={{background:C.s1,borderRadius:'18px 18px 0 0',padding:'20px 16px 36px',border:`1px solid ${C.bd}`}}>
             <div style={{width:36,height:4,background:'#333',borderRadius:2,margin:'0 auto 16px'}}/>
             <div style={{fontWeight:700,fontSize:17,marginBottom:4}}>Senda inn tillögu af vöru</div>
             <div style={{fontSize:12,color:C.mut,marginBottom:16}}>Mynd og lýsing fara til yfirmanns · {userName}</div>
-
-            {/* Photo preview */}
             {photoPreview&&(
               <div style={{position:'relative',marginBottom:12}}>
                 <img src={photoPreview} alt="preview" style={{width:'100%',borderRadius:10,maxHeight:200,objectFit:'cover'}}/>
                 <button onClick={()=>photoRef.current&&photoRef.current.click()} className="tap"
                   style={{position:'absolute',bottom:8,right:8,background:'rgba(0,0,0,.7)',border:'none',borderRadius:8,padding:'6px 10px',color:'#fff',fontSize:11,cursor:'pointer',display:'flex',alignItems:'center',gap:5,fontFamily:'inherit'}}>
-                  <ICamera s={12} c="#fff"/> Taka aðra mynd
+                  <ICamera s={12} c="#fff"/> Önnur mynd
                 </button>
               </div>
             )}
-
-            {/* Description */}
             <div style={{marginBottom:14}}>
               <div style={{fontSize:11,color:C.mut,letterSpacing:1,textTransform:'uppercase',marginBottom:4}}>Lýsing / nafn vöru</div>
-              <textarea value={photoDesc} onChange={e=>setPhotoDesc(e.target.value)}
-                placeholder="Hvað er þetta? Hvar er það notað?"
-                rows={3}
+              <textarea value={photoDesc} onChange={e=>setPhotoDesc(e.target.value)} placeholder="Hvað er þetta? Hvar er það notað?" rows={3}
                 style={{width:'100%',background:C.s2,border:`1px solid ${C.bd}`,borderRadius:8,padding:'10px 12px',color:C.txt,fontSize:14,fontFamily:'inherit',outline:'none',resize:'none'}}/>
             </div>
-
             {photoErr&&<div style={{fontSize:12,color:C.red,marginBottom:12,lineHeight:1.5}}>{photoErr}</div>}
-
             <div style={{display:'flex',gap:8}}>
               <button onClick={resetPhoto} disabled={photoSending} className="tap" style={{flex:1,padding:12,borderRadius:10,border:`1px solid ${C.bd}`,background:'none',color:C.mut,fontSize:13,cursor:'pointer',fontFamily:'inherit',opacity:photoSending?.5:1}}>Hætta við</button>
-              <button onClick={sendPhotoRequest} disabled={photoSending} className="tap"
+              <button onClick={sendPhoto} disabled={photoSending} className="tap"
                 style={{flex:2,padding:12,borderRadius:10,border:'none',background:C.acc,color:'#fff',fontSize:13,fontWeight:600,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:7,fontFamily:'inherit',opacity:photoSending?.7:1}}>
-                {photoSending?<IRefresh s={14} c="#fff" cls="spin"/>:<IShare s={14} c="#fff"/>}
+                {photoSending?<IRefresh s={14} c="#fff" cls="spin"/>:<ICamera s={14} c="#fff"/>}
                 {photoSending?'Sendi...':'Senda tillögu'}
               </button>
             </div>
@@ -688,7 +800,7 @@ function App() {
         </div>
       )}
 
-      {/* ── Order share modal ── */}
+      {/* ORDER SHARE (admin) */}
       {orderShare&&(
         <div onClick={()=>setOrderShare(null)} style={{position:'absolute',inset:0,background:'rgba(0,0,0,.75)',display:'flex',flexDirection:'column',justifyContent:'flex-end',zIndex:200}}>
           <div onClick={e=>e.stopPropagation()} className="sheet" style={{background:C.s1,borderRadius:'18px 18px 0 0',padding:'20px 16px 36px',border:`1px solid ${C.bd}`}}>
@@ -699,13 +811,31 @@ function App() {
             <div style={{display:'flex',flexDirection:'column',gap:8}}>
               {navigator.share&&<button onClick={()=>navigator.share({title:orderShare.subject,text:orderShare.body}).catch(()=>{})} className="tap" style={{width:'100%',padding:13,borderRadius:12,border:'none',background:C.acc,color:'#fff',fontSize:14,fontWeight:600,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:8,fontFamily:'inherit'}}><IShare s={16} c="#fff"/> Deila (tölvupóstur / WhatsApp...)</button>}
               <button onClick={()=>navigator.clipboard.writeText(orderShare.body).then(()=>showToast('✓ Afritað')).catch(()=>{})} className="tap" style={{width:'100%',padding:12,borderRadius:12,border:`1px solid ${C.bd}`,background:C.s2,color:C.txt,fontSize:13,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:7,fontFamily:'inherit'}}><ICopy s={14} c={C.txt}/> Afrita</button>
-              <button onClick={()=>{window.open(`mailto:${orderShare.to}?subject=${encodeURIComponent(orderShare.subject)}&body=${encodeURIComponent(orderShare.body)}`);}} className="tap" style={{width:'100%',padding:12,borderRadius:12,border:`1px solid ${C.bd}`,background:'transparent',color:C.mut,fontSize:13,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:7,fontFamily:'inherit'}}><IMail s={14} c={C.mut}/> Opna í tölvupósti</button>
+              <button onClick={()=>window.open(`mailto:${orderShare.to}?subject=${encodeURIComponent(orderShare.subject)}&body=${encodeURIComponent(orderShare.body)}`)} className="tap" style={{width:'100%',padding:12,borderRadius:12,border:`1px solid ${C.bd}`,background:'transparent',color:C.mut,fontSize:13,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:7,fontFamily:'inherit'}}><IMail s={14} c={C.mut}/> Opna í tölvupósti</button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Toast */}
+      {/* NOTIFICATION SUCCESS OVERLAY */}
+      {notifDone&&(
+        <div style={{position:'absolute',inset:0,background:'rgba(0,0,0,.92)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:250,padding:24}}>
+          <div className="pop" style={{background:C.s1,borderRadius:24,padding:'40px 28px',border:`1px solid ${C.bd}`,textAlign:'center',width:'100%',maxWidth:340}}>
+            <div style={{fontSize:56,marginBottom:16}}>✅</div>
+            <div style={{fontFamily:'Oxanium,sans-serif',fontSize:22,fontWeight:700,color:C.grn,marginBottom:10}}>Tilkynning send!</div>
+            <div style={{fontSize:15,color:C.txt,marginBottom:6,lineHeight:1.5}}>
+              <span style={{color:C.acc,fontWeight:600}}>{ADMIN_NAME}</span> hefur fengið tilkynningu um að panta vörur fyrir þig
+            </div>
+            <div style={{fontSize:12,color:C.mut,marginBottom:28}}>{count} vörur á listanum</div>
+            <button onClick={()=>{setNotifDone(false);setChecked({});}} className="tap"
+              style={{width:'100%',padding:14,borderRadius:12,border:'none',background:C.acc,color:'#fff',fontSize:15,fontWeight:600,cursor:'pointer',fontFamily:'inherit'}}>
+              Allt í lagi 👍
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* TOAST */}
       {toast&&<div className="anim" style={{position:'absolute',bottom:72,left:'50%',transform:'translateX(-50%)',background:'#1e1e1e',border:`1px solid ${C.bd}`,borderRadius:20,padding:'7px 16px',fontSize:12,color:C.txt,whiteSpace:'nowrap',boxShadow:'0 4px 20px rgba(0,0,0,.5)',zIndex:300,pointerEvents:'none'}}>{toast}</div>}
     </div>
   );
