@@ -40,8 +40,8 @@ const REPO          = 'hzak222/PantaAM';
 const JSON_FILE     = 'vorur.json';
 const RAW_URL       = `https://raw.githubusercontent.com/${REPO}/main/${JSON_FILE}`;
 const API_URL       = `https://api.github.com/repos/${REPO}/contents/${JSON_FILE}`;
-const MANAGER_EMAIL = 'atli.j@bl.is';
-const DEFAULT_PW    = 'admin123'; // Admin breytir þessu í stillingum
+const MANAGER_EMAIL = 'atlireynir@gmail.com';
+const DEFAULT_PW    = 'admin123';
 
 const SUP_EMAILS = {
   "Jákó":"jako@jako.is","Kemi":"kemi@kemi.is",
@@ -126,6 +126,7 @@ function App() {
 
   // Admin state
   const [ghToken,   setGhToken]   = useState('');
+  const [web3Key,   setWeb3Key]   = useState('');
   const [pwInput,   setPwInput]   = useState('');
   const [pwError,   setPwError]   = useState(false);
   const [newItem,   setNewItem]   = useState({name:'',sku:'',sup:'Kemi',cat:'Efnavörur',qty:''});
@@ -137,6 +138,8 @@ function App() {
   const [photoFile,   setPhotoFile]   = useState(null);
   const [photoPreview,setPhotoPreview]= useState(null);
   const [photoDesc,   setPhotoDesc]   = useState('');
+  const [photoSending,setPhotoSending]= useState(false);
+  const [photoErr,    setPhotoErr]    = useState(null);
 
   // ── Init ────────────────────────────────────────────────────
   useEffect(()=>{
@@ -146,6 +149,8 @@ function App() {
     if(sv) setChecked(JSON.parse(sv));
     const tk = localStorage.getItem('vrkst-token');
     if(tk) setGhToken(tk);
+    const w3 = localStorage.getItem('vrkst-w3key');
+    if(w3) setWeb3Key(w3);
     const ca = localStorage.getItem('vrkst-items');
     if(ca) setItems(JSON.parse(ca));
     fetchItems();
@@ -217,29 +222,79 @@ function App() {
     const f=e.target.files[0]; if(!f) return;
     setPhotoFile(f);
     setPhotoPreview(URL.createObjectURL(f));
+    setPhotoErr(null);
     setModal('photo');
   };
 
+  // Þjappa mynd niður í lítið JPEG (max 350px) til að henta í tölvupóst
+  const compressImg = (file, maxDim=350, q=0.55) => new Promise((res,rej)=>{
+    const img = new Image();
+    img.onload = () => {
+      let {width:w,height:h} = img;
+      if(w>maxDim||h>maxDim){const r=Math.min(maxDim/w,maxDim/h);w=Math.round(w*r);h=Math.round(h*r);}
+      const c = document.createElement('canvas'); c.width=w; c.height=h;
+      c.getContext('2d').drawImage(img,0,0,w,h);
+      const b64 = c.toDataURL('image/jpeg',q);
+      if(b64==='data:,'||b64.length<100) rej(new Error('compress'));
+      else res(b64);
+    };
+    img.onerror = rej;
+    img.src = URL.createObjectURL(file);
+  });
+
   const sendPhotoRequest = async () => {
-    const msg = `📦 Tillaga að nýrri vöru\nSent af: ${userName}\n\n${photoDesc||'(engin lýsing)'}`;
-    if(navigator.share){
-      try {
-        const shareData = {title:'Tillaga að vöru',text:msg};
-        if(photoFile&&navigator.canShare&&navigator.canShare({files:[photoFile]}))
-          shareData.files = [photoFile];
-        await navigator.share(shareData);
-        showToast('Tillaga send!');
-        resetPhoto();
-        return;
-      } catch(e){ if(e.name==='AbortError') return; }
+    if(photoSending) return;
+    const key = web3Key.trim();
+    if(!key){
+      setPhotoErr('Þarf Web3Forms lykil — Admin skráir sig inn og setur lykilinn inn í stillingum (⚙️)');
+      return;
     }
-    window.open(`mailto:${MANAGER_EMAIL}?subject=${encodeURIComponent('Tillaga að nýrri vöru')}&body=${encodeURIComponent(msg)}`);
-    showToast('Tölvupóstur opnaður');
-    resetPhoto();
+    setPhotoSending(true); setPhotoErr(null);
+    try {
+      // Þjappa mynd og kóða sem base64 — fer beint inn í tölvupóstinn
+      let imgTag = '';
+      if(photoFile){
+        try {
+          const b64 = await compressImg(photoFile);
+          imgTag = `<br><img src="${b64}" style="max-width:320px;border-radius:8px;margin-top:8px;" />`;
+        } catch { imgTag = '<br><i>(Mynd tókst ekki að þjappa)</i>'; }
+      }
+
+      // HTML tölvupóstur — fer beint án þess að opna neitt forrit
+      const html = `
+        <div style="font-family:sans-serif;max-width:500px;">
+          <h2 style="color:#E85D04;margin-bottom:4px;">📦 Tillaga að nýrri vöru</h2>
+          <p><b>Sendandi:</b> ${userName}</p>
+          <p><b>Dagsetning:</b> ${new Date().toLocaleString('is-IS')}</p>
+          <p><b>Lýsing:</b> ${photoDesc||'(engin lýsing)'}</p>
+          ${imgTag}
+        </div>`;
+
+      const res = await fetch('https://api.web3forms.com/submit',{
+        method:'POST',
+        headers:{'Content-Type':'application/json','Accept':'application/json'},
+        body: JSON.stringify({
+          access_key: key,
+          subject: `📦 Tillaga frá ${userName}`,
+          from_name: userName,
+          message: html,
+          html: true,
+          botcheck: false
+        })
+      });
+      const data = await res.json();
+      if(!data.success) throw new Error(data.message||'web3forms villa');
+      showToast('✓ Tillaga send!');
+      resetPhoto();
+    } catch(e){
+      setPhotoErr(`Sending mistókst: ${e.message||'net villa'}`);
+    } finally {
+      setPhotoSending(false);
+    }
   };
 
   const resetPhoto = () => {
-    setPhotoFile(null); setPhotoPreview(null); setPhotoDesc(''); setModal(null);
+    setPhotoFile(null); setPhotoPreview(null); setPhotoDesc(''); setPhotoErr(null); setModal(null);
     if(photoRef.current) photoRef.current.value='';
   };
 
@@ -522,11 +577,21 @@ function App() {
 
                 <div style={{height:1,background:C.bd,margin:'4px 0 12px'}}/>
 
-                <div style={{fontSize:11,color:C.mut,marginBottom:6}}>GITHUB TOKEN</div>
+                <div style={{fontSize:11,color:C.mut,marginBottom:4}}>WEB3FORMS LYKILL (fyrir mynda-tillögur)</div>
+                <div style={{fontSize:11,color:'#555',marginBottom:8,lineHeight:1.5}}>
+                  1. Farðu á <b style={{color:C.acc}}>web3forms.com</b> → sláðu inn {MANAGER_EMAIL} → smelltu "Create Access Key"<br/>
+                  2. Þú færð lykilinn í tölvupósti (1 mín) — límdu hann hér:
+                </div>
+                <Field value={web3Key} onChange={v=>{setWeb3Key(v);localStorage.setItem('vrkst-w3key',v);}} placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" mono small/>
+                {web3Key&&<div style={{fontSize:11,color:C.grn,marginBottom:10,marginTop:-8}}>✓ Lykill vistaður — mynda-tillögur virka núna</div>}
+
+                <div style={{height:1,background:C.bd,margin:'4px 0 12px'}}/>
+
+                <div style={{fontSize:11,color:C.mut,marginBottom:6}}>GITHUB TOKEN (til að bæta við vörum)</div>
                 <div style={{fontSize:11,color:'#555',marginBottom:8,lineHeight:1.5}}>
                   github.com → Settings → Developer settings → Personal access tokens → Generate (Contents: Read & Write)
                 </div>
-                <Field value={ghToken} onChange={v=>{setGhToken(v);localStorage.setItem('vrkst-token',v);}} placeholder="ghp_xxxxxxxxxxxx" mono/>
+                <Field value={ghToken} onChange={v=>{setGhToken(v);localStorage.setItem('vrkst-token',v);}} placeholder="ghp_xxxxxxxxxxxx" mono small/>
 
                 <button onClick={()=>{setModal('addItem');}} className="tap" style={{width:'100%',padding:12,borderRadius:10,border:'none',background:C.acc,color:'#fff',fontSize:13,fontWeight:600,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:8,fontFamily:'inherit',marginTop:4}}>
                   <IPlus s={15} c="#fff"/> Bæta við nýrri vöru
@@ -583,7 +648,7 @@ function App() {
 
       {/* ── Photo request modal ── */}
       {modal==='photo'&&(
-        <div onClick={resetPhoto} style={{position:'absolute',inset:0,background:'rgba(0,0,0,.85)',display:'flex',flexDirection:'column',justifyContent:'flex-end',zIndex:200}}>
+        <div onClick={()=>!photoSending&&resetPhoto()} style={{position:'absolute',inset:0,background:'rgba(0,0,0,.85)',display:'flex',flexDirection:'column',justifyContent:'flex-end',zIndex:200}}>
           <div onClick={e=>e.stopPropagation()} className="sheet" style={{background:C.s1,borderRadius:'18px 18px 0 0',padding:'20px 16px 36px',border:`1px solid ${C.bd}`}}>
             <div style={{width:36,height:4,background:'#333',borderRadius:2,margin:'0 auto 16px'}}/>
             <div style={{fontWeight:700,fontSize:17,marginBottom:4}}>Senda inn tillögu af vöru</div>
@@ -609,11 +674,14 @@ function App() {
                 style={{width:'100%',background:C.s2,border:`1px solid ${C.bd}`,borderRadius:8,padding:'10px 12px',color:C.txt,fontSize:14,fontFamily:'inherit',outline:'none',resize:'none'}}/>
             </div>
 
+            {photoErr&&<div style={{fontSize:12,color:C.red,marginBottom:12,lineHeight:1.5}}>{photoErr}</div>}
+
             <div style={{display:'flex',gap:8}}>
-              <button onClick={resetPhoto} className="tap" style={{flex:1,padding:12,borderRadius:10,border:`1px solid ${C.bd}`,background:'none',color:C.mut,fontSize:13,cursor:'pointer',fontFamily:'inherit'}}>Hætta við</button>
-              <button onClick={sendPhotoRequest} className="tap"
-                style={{flex:2,padding:12,borderRadius:10,border:'none',background:C.acc,color:'#fff',fontSize:13,fontWeight:600,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:7,fontFamily:'inherit'}}>
-                <IShare s={14} c="#fff"/> Senda tillögu
+              <button onClick={resetPhoto} disabled={photoSending} className="tap" style={{flex:1,padding:12,borderRadius:10,border:`1px solid ${C.bd}`,background:'none',color:C.mut,fontSize:13,cursor:'pointer',fontFamily:'inherit',opacity:photoSending?.5:1}}>Hætta við</button>
+              <button onClick={sendPhotoRequest} disabled={photoSending} className="tap"
+                style={{flex:2,padding:12,borderRadius:10,border:'none',background:C.acc,color:'#fff',fontSize:13,fontWeight:600,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:7,fontFamily:'inherit',opacity:photoSending?.7:1}}>
+                {photoSending?<IRefresh s={14} c="#fff" cls="spin"/>:<IShare s={14} c="#fff"/>}
+                {photoSending?'Sendi...':'Senda tillögu'}
               </button>
             </div>
           </div>
