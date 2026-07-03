@@ -553,7 +553,7 @@ function App(){
   const checkedList=useMemo(()=>items.filter(i=>checked[i.id]),[items,checked]);
   const checkedGrp =useMemo(()=>grp(checkedList,'sup'),[checkedList]);
   const count      =checkedList.length;
-  const suppliers  =useMemo(()=>[...new Set(items.filter(i=>i.cat===cat).map(i=>i.sup))].[cat],[items,cat]);
+  const suppliers  =useMemo(()=>[...new Set(items.filter(i=>i.cat===cat).map(i=>i.sup))],[items,cat]);
 
   const Divider=({label})=>(
     <div style={{display:'flex',alignItems:'center',padding:'8px 16px 2px',gap:8}}>
