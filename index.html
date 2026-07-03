@@ -101,13 +101,13 @@ const hits = (item,q)=>!q||norm(q).split(/\s+/).filter(Boolean).every(w=>norm(`$
 const grp  = (arr,key)=>arr.reduce((g,x)=>{(g[x[key]]=g[x[key]]||[]).push(x);return g;},{});
 const buildOrder = (items,supName)=>{
   const dt=new Date().toLocaleDateString('is-IS');
-  let b=supName?'Hæ,\n\nVið viljum panta eftirfarandi:\n\n':`Pöntunaryfirlit – ${dt}\n\n`;
+  let b=supName?'Sælir,\n\nGeti þið sent okkur eftirfarandi:\n\n':`Pöntunaryfirlit – ${dt}\n\n`;
   Object.entries(grp(items,'sup')).forEach(([s,its])=>{
     if(!supName) b+=`── ${s} ──\n`;
     its.forEach(i=>{b+=`• ${i.name}`;if(i.sku)b+=` (VNR: ${i.sku})`;b+=` — ${i.qty}\n`;});
     b+='\n';
   });
-  return b+(supName?'\nKveðja,\nVerkstæðið':'\nSent frá Verkstæðinu');
+  return b+(supName?'\nKveðja,\nVerkstæðið':'\nJLR Verkstæði Hesthálsi 6-8');
 };
 const ghCommit = async (apiUrl,token,newData,message)=>{
   const r=await fetch(apiUrl,{headers:{Authorization:`token ${token}`,Accept:'application/vnd.github.v3+json'}});
