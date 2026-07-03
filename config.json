@@ -1,5 +1,6 @@
 {
   "w3key": "0770fd86-83a6-48ce-ac8f-ff2087194e50",
-  "admin_name": "Atli Froskur",
-  "admin_email": "atlireynir@gmail.com"
+  "admin_name": "AMJ",
+  "admin_email": "atlireynir@gmail.com",
+  "firebase_url": "https://pantaamj-default-rtdb.europe-west1.firebasedatabase.app/"
 }

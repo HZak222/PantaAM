@@ -24,6 +24,7 @@
     @keyframes slideup{from{transform:translateY(100%)}to{transform:translateY(0)}}.sheet{animation:slideup .26s cubic-bezier(.32,1,.32,1) forwards;}
     @keyframes spin{to{transform:rotate(360deg)}}.spin{animation:spin .8s linear infinite;}
     @keyframes pop{0%{transform:scale(.85);opacity:0}100%{transform:scale(1);opacity:1}}.pop{animation:pop .3s cubic-bezier(.34,1.56,.64,1) forwards;}
+    @keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}.blink{animation:blink 1.2s ease infinite;}
   </style>
 </head>
 <body><div id="root"></div>
@@ -33,9 +34,9 @@
 <script type="text/babel">
 const {useState,useEffect,useMemo,useCallback,useRef} = React;
 
-// ══════════════════════════════════════════════════════
-//  CONFIG — aðeins þetta þarf að breyta ef repo breytist
-// ══════════════════════════════════════════════════════
+// ══════════════════════════════════════════════
+//  CONFIG
+// ══════════════════════════════════════════════
 const REPO       = 'hzak222/PantaAM';
 const ITEMS_URL  = `https://raw.githubusercontent.com/${REPO}/main/vorur.json`;
 const CONFIG_URL = `https://raw.githubusercontent.com/${REPO}/main/config.json`;
@@ -47,11 +48,31 @@ const DEFAULT_PW = 'admin123';
 const SUP_EMAILS = {"Jákó":"jako@jako.is","Kemi":"kemi@kemi.is","Tandur":"Tandur@tandur.is","Wurth":"Benni@wurth.is","Bosch":"kemi@kemi.is","Philips":"kemi@kemi.is"};
 const ALL_SUPS   = ['Jákó','Kemi','Tandur','Wurth','Bosch','Philips'];
 
-// ══════════════════════════════════════════════════════
-//  HJÁLPARFÖLL
-// ══════════════════════════════════════════════════════
+// ══════════════════════════════════════════════
+//  FIREBASE — deilður stöðugrunnur milli tækja
+//  Ókeypis, ótakmarkaðar beiðnir, einn URL
+// ══════════════════════════════════════════════
+const fbRead = async (fbUrl) => {
+  const res = await fetch(`${fbUrl}/state.json`);
+  if(!res.ok) throw new Error(`Firebase villa: ${res.status}`);
+  const d = await res.json();
+  return d || {};
+};
+
+const fbWrite = async (fbUrl, data) => {
+  const res = await fetch(`${fbUrl}/state.json`, {
+    method: 'PUT',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(data)
+  });
+  if(!res.ok) throw new Error(`Firebase write villa: ${res.status}`);
+};
+
+// ══════════════════════════════════════════════
+//  GITHUB HELPER
+// ══════════════════════════════════════════════
 const norm = s=>(s||'').toLowerCase().replace(/[áä]/g,'a').replace(/[éê]/g,'e').replace(/[íî]/g,'i').replace(/[óö]/g,'o').replace(/[úü]/g,'u').replace(/ý/g,'y').replace(/ð/g,'d').replace(/þ/g,'th').replace(/æ/g,'ae');
-const hits = (item,q)=>{ if(!q)return true; return norm(q).split(/\s+/).filter(Boolean).every(w=>norm(`${item.name} ${item.sku} ${item.sup}`).includes(w)); };
+const hits = (item,q)=>!q||norm(q).split(/\s+/).filter(Boolean).every(w=>norm(`${item.name} ${item.sku} ${item.sup}`).includes(w));
 const grp  = (arr,key)=>arr.reduce((g,x)=>{(g[x[key]]=g[x[key]]||[]).push(x);return g;},{});
 const buildOrder = (items,supName)=>{
   const dt=new Date().toLocaleDateString('is-IS');
@@ -63,20 +84,19 @@ const buildOrder = (items,supName)=>{
   });
   return b+(supName?'\nKveðja,\nVerkstæðið':'\nSent frá Verkstæðinu');
 };
-const ghCommit = async (apiUrl,token,newData,message,existingSha=null)=>{
-  if(!existingSha){
-    const r=await fetch(apiUrl,{headers:{Authorization:`token ${token}`,Accept:'application/vnd.github.v3+json'}});
-    const d=await r.json(); if(r.ok&&d.sha) existingSha=d.sha;
-  }
+const ghCommit = async (apiUrl,token,newData,message)=>{
+  const r=await fetch(apiUrl,{headers:{Authorization:`token ${token}`,Accept:'application/vnd.github.v3+json'}});
+  const d=await r.json();
   const content=btoa(unescape(encodeURIComponent(JSON.stringify(newData,null,2))));
-  const body={message,content}; if(existingSha) body.sha=existingSha;
+  const body={message,content};
+  if(r.ok&&d.sha) body.sha=d.sha;
   const put=await fetch(apiUrl,{method:'PUT',headers:{Authorization:`token ${token}`,'Content-Type':'application/json'},body:JSON.stringify(body)});
   if(!put.ok){const e=await put.json();throw new Error(e.message||'commit villa');}
 };
 
-// ══════════════════════════════════════════════════════
-//  SVG TÁKN
-// ══════════════════════════════════════════════════════
+// ══════════════════════════════════════════════
+//  ICONS
+// ══════════════════════════════════════════════
 const Ic=({s=16,c='currentColor',st,cls,ch})=><svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={st} className={cls}>{ch}</svg>;
 const ISearch =({s,c})=><Ic s={s} c={c} ch={<><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></>}/>;
 const IMic    =({s,c,cls})=><Ic s={s} c={c} cls={cls} ch={<><path d="M12 2a3 3 0 0 1 3 3v7a3 3 0 0 1-6 0V5a3 3 0 0 1 3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></>}/>;
@@ -96,57 +116,66 @@ const IRefresh=({s,c,cls})=><Ic s={s} c={c} cls={cls} ch={<><polyline points="23
 const IUser   =({s,c})=><Ic s={s} c={c} ch={<><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></>}/>;
 const ILock   =({s,c})=><Ic s={s} c={c} ch={<><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></>}/>;
 const IKey    =({s,c})=><Ic s={s} c={c} ch={<><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></>}/>;
-const IBell   =({s,c})=><Ic s={s} c={c} ch={<><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></>}/>;
+const IBell   =({s,c,cls})=><Ic s={s} c={c} cls={cls} ch={<><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></>}/>;
 const IShield =({s,c})=><Ic s={s} c={c} ch={<><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></>}/>;
 const ICopy   =({s,c})=><Ic s={s} c={c} ch={<><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></>}/>;
-const ILink   =({s,c})=><Ic s={s} c={c} ch={<><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></>}/>;
+const IWifi   =({s,c})=><Ic s={s} c={c} ch={<><path d="M1.42 9a16 16 0 0 1 21.16 0"/><path d="M5 12.55a11 11 0 0 1 14.08 0"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><line x1="12" y1="20" x2="12.01" y2="20"/></>}/>;
 
-const C={bg:'#0b0b0b',s1:'#141414',s2:'#1c1c1c',bd:'#272727',acc:'#E85D04',txt:'#efefef',mut:'#666',grn:'#22c55e',red:'#ef4444',blu:'#3b82f6'};
+const C={bg:'#0b0b0b',s1:'#141414',s2:'#1c1c1c',bd:'#272727',acc:'#E85D04',txt:'#efefef',mut:'#666',grn:'#22c55e',red:'#ef4444',amb:'#f59e0b'};
 
-// ══════════════════════════════════════════════════════
+// ══════════════════════════════════════════════
 //  REUSABLE UI
-// ══════════════════════════════════════════════════════
-const Field=({label,value,onChange,placeholder,type='text',mono=false,hint,action})=>(
+// ══════════════════════════════════════════════
+const Field=({label,value,onChange,placeholder,type='text',mono=false,hint,action,small=false})=>(
   <div style={{marginBottom:12}}>
     {label&&<div style={{fontSize:11,color:C.mut,letterSpacing:1,textTransform:'uppercase',marginBottom:4}}>{label}</div>}
     <div style={{display:'flex',gap:6}}>
       <input type={type} value={value} onChange={e=>onChange(e.target.value)} placeholder={placeholder}
-        style={{flex:1,background:C.s2,border:`1px solid ${C.bd}`,borderRadius:8,padding:'9px 11px',color:C.txt,fontSize:13,fontFamily:mono?'\'Fira Code\',monospace':'inherit',outline:'none'}}/>
+        style={{flex:1,background:C.s2,border:`1px solid ${C.bd}`,borderRadius:8,padding:small?'7px 10px':'9px 11px',color:C.txt,fontSize:small?12:13,fontFamily:mono?'\'Fira Code\',monospace':'inherit',outline:'none'}}/>
       {action&&<button onClick={action.fn} className="tap" style={{padding:'9px 12px',borderRadius:8,border:'none',background:C.acc,color:'#fff',fontSize:12,fontWeight:600,cursor:'pointer',whiteSpace:'nowrap',fontFamily:'inherit'}}>{action.label}</button>}
     </div>
-    {hint&&<div style={{fontSize:11,color:'#555',marginTop:4,lineHeight:1.5}}>{hint}</div>}
+    {hint&&<div style={{fontSize:11,color:'#555',marginTop:4,lineHeight:1.5,whiteSpace:'pre-wrap'}}>{hint}</div>}
   </div>
 );
 
 const Sheet=({onClose,children,z=200})=>(
-  <div onClick={onClose} style={{position:'absolute',inset:0,background:'rgba(0,0,0,.8)',display:'flex',flexDirection:'column',justifyContent:'flex-end',zIndex:z}}>
-    <div onClick={e=>e.stopPropagation()} className="sheet" style={{background:C.s1,borderRadius:'18px 18px 0 0',padding:'20px 16px 38px',border:`1px solid ${C.bd}`,maxHeight:'90vh',overflowY:'auto'}}>
+  <div onClick={onClose} style={{position:'absolute',inset:0,background:'rgba(0,0,0,.82)',display:'flex',flexDirection:'column',justifyContent:'flex-end',zIndex:z}}>
+    <div onClick={e=>e.stopPropagation()} className="sheet" style={{background:C.s1,borderRadius:'18px 18px 0 0',padding:'20px 16px 40px',border:`1px solid ${C.bd}`,maxHeight:'90vh',overflowY:'auto'}}>
       <div style={{width:36,height:4,background:'#333',borderRadius:2,margin:'0 auto 18px'}}/>
       {children}
     </div>
   </div>
 );
 
-// ══════════════════════════════════════════════════════
+// ══════════════════════════════════════════════
 //  APP
-// ══════════════════════════════════════════════════════
+// ══════════════════════════════════════════════
 function App(){
   // Identity
   const [userName,   setUserName]   = useState('');
   const [nameSet,    setNameSet]    = useState(false);
   const [isAdmin,    setIsAdmin]    = useState(false);
 
-  // Config (fetched from GitHub, available to ALL users)
+  // Config (from GitHub config.json, available to ALL)
   const [web3Key,    setWeb3Key]    = useState('');
   const [adminName,  setAdminName]  = useState('AMJ');
+  const [fbUrl,      setFbUrl]      = useState('');
   const [configReady,setConfigReady]= useState(false);
 
   // Data
   const [items,      setItems]      = useState([]);
   const [loading,    setLoading]    = useState(true);
 
-  // UI state
+  // Shared state (from Firebase)
+  // checked = {id: true/false, ...}
+  // notification = {by: 'Jón', at: '...', count: 3} | null
   const [checked,    setChecked]    = useState({});
+  const [notification,setNotification]= useState(null); // last "láta vita"
+  const [syncStatus, setSyncStatus] = useState('idle'); // 'idle'|'syncing'|'synced'|'error'
+  const syncTimer = useRef(null);
+  const lastWritten = useRef(null); // avoid re-writing same state
+
+  // UI
   const [view,       setView]       = useState('list');
   const [cat,        setCat]        = useState('Efnavörur');
   const [query,      setQuery]      = useState('');
@@ -156,20 +185,19 @@ function App(){
   const [toast,      setToast]      = useState(null);
   const [listening,  setListening]  = useState(false);
 
-  // Pre-loaded from URL (admin link)
-  const [preLoaded,  setPreLoaded]  = useState(0);
-
-  // Notification
+  // Notification flow
   const [notifSending,setNotifSending]= useState(false);
-  const [notifDone,   setNotifDone]   = useState(false);
+  const [notifDone,  setNotifDone]  = useState(false);
 
   // Admin
   const [ghToken,    setGhToken]    = useState('');
   const [pwInput,    setPwInput]    = useState('');
   const [pwError,    setPwError]    = useState(false);
   const [newPw,      setNewPw]      = useState('');
-  const [newW3,      setNewW3]      = useState('');
   const [saving,     setSaving]     = useState(false);
+  // Settings fields for new keys
+  const [settW3,     setSettW3]     = useState('');
+  const [settFbUrl,  setSettFbUrl]  = useState('');
 
   // Item CRUD
   const [newItem,    setNewItem]    = useState({name:'',sku:'',sup:'Kemi',cat:'Efnavörur',qty:''});
@@ -184,170 +212,195 @@ function App(){
   const [photoSending, setPhotoSending] = useState(false);
   const [photoErr,     setPhotoErr]     = useState(null);
 
-  // Order share (admin)
+  // Order share
   const [orderShare, setOrderShare] = useState(null);
 
-  // ── INIT ─────────────────────────────────────────────
+  // ── INIT ─────────────────────────────────────
   useEffect(()=>{
-    // Restore name + admin token from localStorage
     const n=localStorage.getItem('vrkst-name'); if(n){setUserName(n);setNameSet(true);}
     const tk=localStorage.getItem('vrkst-token'); if(tk) setGhToken(tk);
-    const sv=localStorage.getItem('vrkst-checked'); if(sv) setChecked(JSON.parse(sv));
-    const ca=localStorage.getItem('vrkst-items'); if(ca) setItems(JSON.parse(ca));
-
-    // Parse URL — admin link contains ?order=id1,id2,...
-    const params=new URLSearchParams(window.location.search);
-    const orderParam=params.get('order');
-    if(orderParam){
-      const ids=orderParam.split(',').filter(Boolean);
-      if(ids.length>0){
-        const pre={}; ids.forEach(id=>pre[id]=true);
-        setChecked(pre);
-        setPreLoaded(ids.length);
-        // Clean URL without refresh
-        window.history.replaceState({},'',window.location.pathname);
-      }
-    }
-
     // Fetch config + items in parallel
     fetchConfig();
     fetchItems();
   },[]);
 
-  useEffect(()=>{
-    try{localStorage.setItem('vrkst-checked',JSON.stringify(checked));}catch{}
-  },[checked]);
-
-  // ── FETCH CONFIG (w3key for ALL users, no login needed) ──────
-  const fetchConfig=async()=>{
+  // ── FETCH CONFIG ─────────────────────────────
+  const fetchConfig = async () => {
     try{
       const res=await fetch(`${CONFIG_URL}?t=${Date.now()}`);
       if(!res.ok) return;
-      const data=await res.json();
-      if(data.w3key&&!data.w3key.startsWith('SETJA_')) setWeb3Key(data.w3key);
-      if(data.admin_name) setAdminName(data.admin_name);
+      const d=await res.json();
+      if(d.w3key&&!d.w3key.startsWith('SETJA_'))  setWeb3Key(d.w3key);
+      if(d.admin_name)                             setAdminName(d.admin_name);
+      if(d.firebase_url&&!d.firebase_url.startsWith('SETJA_')) setFbUrl(d.firebase_url);
     }catch{}
     finally{setConfigReady(true);}
   };
 
-  // ── SAVE CONFIG (admin only, via GitHub API) ──────────────────
-  const saveConfig=async(key)=>{
-    if(!ghToken){showToast('GitHub token vantar');return;}
-    setSaving(true);
+  // ── FETCH SHARED STATE (Firebase) ──────────────
+  // Called once config is ready and fbUrl is set
+  useEffect(()=>{
+    if(configReady&&fbUrl) fetchSharedState();
+  },[configReady,fbUrl]);
+
+  const fetchSharedState = async () => {
+    if(!fbUrl) return;
+    setSyncStatus('syncing');
     try{
-      await ghCommit(CONFIG_API,ghToken,{w3key:key,admin_name:adminName,admin_email:ADMIN_EMAIL},'Uppfært config');
-      setWeb3Key(key);
-      showToast('✓ Lykill vistaður — allir notendur geta nú sent tilkynningar!');
-      setNewW3('');
-    }catch(e){showToast(`Villa: ${e.message}`);}
-    finally{setSaving(false);}
+      const state = await fbRead(fbUrl);
+      if(state.checked) setChecked(state.checked);
+      if(state.notification) setNotification(state.notification);
+      lastWritten.current = JSON.stringify(state.checked||{});
+      setSyncStatus('synced');
+    }catch(e){
+      setSyncStatus('error');
+    }
   };
 
-  // ── FETCH ITEMS ───────────────────────────────────────────────
+  // ── WRITE SHARED STATE — debounced 1s ─────────
+  const writeSharedState = useCallback((newChecked, notif=null) => {
+    if(!fbUrl) return;
+    const serialized = JSON.stringify(newChecked);
+    if(serialized === lastWritten.current && !notif) return;
+    if(syncTimer.current) clearTimeout(syncTimer.current);
+    setSyncStatus('syncing');
+    syncTimer.current = setTimeout(async ()=>{
+      try{
+        const state = {checked: newChecked};
+        if(notif) state.notification = notif;
+        else {
+          try{
+            const current = await fbRead(fbUrl);
+            if(current.notification) state.notification = current.notification;
+          }catch{}
+        }
+        await fbWrite(fbUrl, state);
+        lastWritten.current = serialized;
+        setSyncStatus('synced');
+      }catch{
+        setSyncStatus('error');
+      }
+    }, 800);
+  },[fbUrl]);
+
+  // ── TOGGLE ITEM (shared) ───────────────────────
+  const toggle = useCallback(id => {
+    setChecked(prev => {
+      const next = {...prev, [id]: !prev[id]};
+      // Remove false values to keep state clean
+      if(!next[id]) delete next[id];
+      writeSharedState(next);
+      return next;
+    });
+  },[writeSharedState]);
+
+  // ── FETCH ITEMS ───────────────────────────────
   const fetchItems=async()=>{
     setLoading(true);
     try{
       const res=await fetch(`${ITEMS_URL}?t=${Date.now()}`);
       if(!res.ok) throw new Error();
-      const data=await res.json();
-      setItems(data);
-      localStorage.setItem('vrkst-items',JSON.stringify(data));
-    }catch{}
+      const d=await res.json();
+      setItems(d);
+      localStorage.setItem('vrkst-items',JSON.stringify(d));
+    }catch{
+      const ca=localStorage.getItem('vrkst-items'); if(ca) setItems(JSON.parse(ca));
+    }
     finally{setLoading(false);}
   };
 
-  // ── ITEM CRUD (admin) ─────────────────────────────────────────
+  // ── SAVE CONFIG ───────────────────────────────
+  const saveConfig = async (newConf) => {
+    if(!ghToken){showToast('GitHub token vantar');return;}
+    setSaving(true);
+    try{
+      const full={w3key:newConf.w3||web3Key, admin_name:adminName, admin_email:ADMIN_EMAIL, firebase_url:newConf.fbUrl||fbUrl};
+      await ghCommit(CONFIG_API, ghToken, full, 'Uppfært config');
+      if(newConf.w3)    setWeb3Key(newConf.w3);
+      if(newConf.fbUrl) setFbUrl(newConf.fbUrl);
+      setSettW3(''); setSettFbUrl('');
+      showToast('✓ Config vistað á GitHub — allir notendur uppfærðir!');
+    }catch(e){showToast(`Villa: ${e.message}`);}
+    finally{setSaving(false);}
+  };
+
+  // ── ITEM CRUD ─────────────────────────────────
   const commitItems=async(newItems,msg)=>{
     if(!ghToken) throw new Error('GitHub token vantar');
     await ghCommit(ITEMS_API,ghToken,newItems,msg);
     setItems(newItems);
     localStorage.setItem('vrkst-items',JSON.stringify(newItems));
   };
-
   const addItem=async()=>{
     if(!newItem.name.trim()||!newItem.qty.trim()) return showToast('Fylltu út nafn og magn');
     setSaving(true);
-    try{
-      await commitItems([...items,{id:`u${Date.now()}`,...newItem}],`Bætt við: ${newItem.name}`);
-      setNewItem({name:'',sku:'',sup:'Kemi',cat:'Efnavörur',qty:''});
-      setModal(null); showToast('✓ Vöru bætt við!');
-    }catch(e){showToast(`Villa: ${e.message}`);}
+    try{await commitItems([...items,{id:`u${Date.now()}`,...newItem}],`Bætt við: ${newItem.name}`);setNewItem({name:'',sku:'',sup:'Kemi',cat:'Efnavörur',qty:''});setModal(null);showToast('✓ Vöru bætt við!');}
+    catch(e){showToast(`Villa: ${e.message}`);}
     finally{setSaving(false);}
   };
-
   const saveEdit=async()=>{
     if(!editItem?.name?.trim()||!editItem?.qty?.trim()) return showToast('Fylltu út nafn og magn');
     setSaving(true);
-    try{
-      await commitItems(items.map(i=>i.id===editItem.id?editItem:i),`Breytti: ${editItem.name}`);
-      setEditItem(null); showToast('✓ Vara uppfærð!');
-    }catch(e){showToast(`Villa: ${e.message}`);}
+    try{await commitItems(items.map(i=>i.id===editItem.id?editItem:i),`Breytti: ${editItem.name}`);setEditItem(null);showToast('✓ Vara uppfærð!');}
+    catch(e){showToast(`Villa: ${e.message}`);}
     finally{setSaving(false);}
   };
-
   const deleteItem=async(id)=>{
     setSaving(true);
     try{
       await commitItems(items.filter(i=>i.id!==id),'Eytti vöru');
-      setChecked(p=>{const n={...p};delete n[id];return n;});
+      const next={...checked}; delete next[id]; setChecked(next);
+      writeSharedState(next);
       setDelId(null); showToast('✓ Vöru eytt!');
     }catch(e){showToast(`Villa: ${e.message}`);}
     finally{setSaving(false);}
   };
 
-  // ── SEND NOTIFICATION TO ADMIN ────────────────────────────────
-  // Generates a clickable link — when admin clicks it the app
-  // opens with exactly those items pre-checked.
+  // ── SEND NOTIFICATION ─────────────────────────
   const sendNotification=async()=>{
-    if(!web3Key){showToast('Admin þarf fyrst að setja upp Web3Forms lykil (⚙️)');return;}
+    if(!web3Key){showToast('Admin þarf að setja upp Web3Forms lykil (⚙️)');return;}
     if(!count) return;
     setNotifSending(true);
     try{
-      const ids=checkedList.map(i=>i.id).join(',');
-      const base=window.location.origin+window.location.pathname;
-      const orderLink=`${base}?order=${encodeURIComponent(ids)}`;
-      const dt=new Date().toLocaleString('is-IS');
-      const rows=checkedList.map(i=>`<tr><td style="padding:6px 12px;border-bottom:1px solid #eee">${i.name}</td><td style="padding:6px 12px;border-bottom:1px solid #eee;color:#888">${i.sku||''}</td><td style="padding:6px 12px;border-bottom:1px solid #eee">${i.qty}</td></tr>`).join('');
-      const html=`<div style="font-family:sans-serif;max-width:560px;color:#111">
-        <h2 style="color:#E85D04;margin-bottom:4px">📋 Pöntunarbeiðni</h2>
-        <p style="color:#666;margin-bottom:16px"><b>Frá:</b> ${userName} &nbsp;·&nbsp; <b>Dagsetning:</b> ${dt}</p>
-        <table style="width:100%;border-collapse:collapse;margin-bottom:24px">
-          <thead><tr style="background:#f5f5f5"><th style="padding:8px 12px;text-align:left">Vara</th><th style="padding:8px 12px;text-align:left">VNR</th><th style="padding:8px 12px;text-align:left">Magn</th></tr></thead>
-          <tbody>${rows}</tbody>
-        </table>
-        <div style="background:#fff8f5;border:2px solid #E85D04;border-radius:10px;padding:20px;text-align:center">
-          <p style="font-size:15px;margin-bottom:14px;font-weight:600">Smelltu hér til að opna pöntunina beint í appinu:</p>
-          <a href="${orderLink}" style="display:inline-block;background:#E85D04;color:#fff;padding:13px 28px;border-radius:8px;text-decoration:none;font-weight:700;font-size:15px">📱 Opna pöntun í appinu</a>
-          <p style="font-size:11px;color:#aaa;margin-top:12px">Allar valdar vörur eru forvaldar þegar þú smellir</p>
-        </div>
-      </div>`;
-      const res=await fetch('https://api.web3forms.com/submit',{
-        method:'POST',headers:{'Content-Type':'application/json','Accept':'application/json'},
-        body:JSON.stringify({access_key:web3Key,subject:`📋 Pöntunarbeiðni frá ${userName} — ${count} vörur`,from_name:userName,message:html,html:true,botcheck:false})
-      });
-      const data=await res.json();
-      if(!data.success) throw new Error(data.message||'villa');
+      const dt=new Date();
+      const dtStr=dt.toLocaleString('is-IS');
+      const rows=checkedList.map(i=>`<tr><td style="padding:6px 12px;border-bottom:1px solid #eee;font-weight:500">${i.name}</td><td style="padding:6px 12px;border-bottom:1px solid #eee;color:#888;font-size:12px">${i.sku||'—'}</td><td style="padding:6px 12px;border-bottom:1px solid #eee">${i.qty}</td></tr>`).join('');
+      const html=`<div style="font-family:sans-serif;max-width:560px;color:#111"><h2 style="color:#E85D04;margin-bottom:4px">📋 Pöntunarbeiðni</h2><p style="color:#666;margin-bottom:16px"><b>Frá:</b> ${userName} &nbsp;·&nbsp; <b>Dagsetning:</b> ${dtStr}</p><table style="width:100%;border-collapse:collapse;margin-bottom:24px"><thead><tr style="background:#f9f9f9"><th style="padding:8px 12px;text-align:left;font-size:12px">Vara</th><th style="padding:8px 12px;text-align:left;font-size:12px">VNR</th><th style="padding:8px 12px;text-align:left;font-size:12px">Magn</th></tr></thead><tbody>${rows}</tbody></table><p style="color:#888;font-size:13px">Hakarnir halda sér í appinu svo þú getir sent pöntunina þegar hentar.</p></div>`;
+      const res=await fetch('https://api.web3forms.com/submit',{method:'POST',headers:{'Content-Type':'application/json','Accept':'application/json'},body:JSON.stringify({access_key:web3Key,subject:`📋 Pöntunarbeiðni frá ${userName} — ${count} vörur`,from_name:userName,message:html,html:true,botcheck:false})});
+      const d=await res.json();
+      if(!d.success) throw new Error(d.message||'villa');
+
+      // Update shared state with notification info
+      const notif={by:userName, at:dt.toISOString(), count};
+      setNotification(notif);
+      if(fbUrl){
+        try{ await fbWrite(fbUrl,{checked,notification:notif}); setSyncStatus('synced'); }catch{}
+      }
       setNotifDone(true);
     }catch(e){showToast(`Sending mistókst: ${e.message||'net villa'}`);}
     finally{setNotifSending(false);}
   };
 
-  // ── PHOTO SUBMISSION ──────────────────────────────────────────
+  // ── CLEAR ORDER (admin) ───────────────────────
+  const clearOrder=async()=>{
+    const emptyChecked={};
+    setChecked(emptyChecked);
+    setNotification(null);
+    if(fbUrl){
+      try{await fbWrite(fbUrl,{checked:{},notification:null});setSyncStatus('synced');}catch{}
+    }
+    showToast('✓ Pöntun hreinsuð');
+  };
+
+  // ── PHOTO ─────────────────────────────────────
   const onPhotoChange=e=>{const f=e.target.files[0];if(!f)return;setPhotoFile(f);setPhotoPreview(URL.createObjectURL(f));setPhotoErr(null);setModal('photo');};
   const compressImg=(file,max=350,q=0.55)=>new Promise((res,rej)=>{
     const img=new Image();
-    img.onload=()=>{
-      let{width:w,height:h}=img;
-      if(w>max||h>max){const r=Math.min(max/w,max/h);w=Math.round(w*r);h=Math.round(h*r);}
-      const c=document.createElement('canvas');c.width=w;c.height=h;
-      c.getContext('2d').drawImage(img,0,0,w,h);
-      const b64=c.toDataURL('image/jpeg',q);
-      if(b64.length<100)rej(new Error('compress'));else res(b64);
-    };
+    img.onload=()=>{let{width:w,height:h}=img;if(w>max||h>max){const r=Math.min(max/w,max/h);w=Math.round(w*r);h=Math.round(h*r);}const c=document.createElement('canvas');c.width=w;c.height=h;c.getContext('2d').drawImage(img,0,0,w,h);const b64=c.toDataURL('image/jpeg',q);if(b64.length<100)rej(new Error('compress'));else res(b64);};
     img.onerror=rej;img.src=URL.createObjectURL(file);
   });
   const sendPhoto=async()=>{
-    if(!web3Key){setPhotoErr('Admin þarf fyrst að setja upp Web3Forms lykil (⚙️)');return;}
+    if(!web3Key){setPhotoErr('Admin þarf að setja upp Web3Forms lykil (⚙️)');return;}
     if(photoSending)return;
     setPhotoSending(true);setPhotoErr(null);
     try{
@@ -355,15 +408,15 @@ function App(){
       if(photoFile){try{const b64=await compressImg(photoFile);imgTag=`<br><img src="${b64}" style="max-width:320px;border-radius:8px;margin-top:8px"/>`;}catch{imgTag='<br><i>(Mynd tókst ekki)</i>';}}
       const html=`<div style="font-family:sans-serif;max-width:500px"><h2 style="color:#E85D04">📦 Tillaga að nýrri vöru</h2><p><b>Sendandi:</b> ${userName}</p><p><b>Dagsetning:</b> ${new Date().toLocaleString('is-IS')}</p><p><b>Lýsing:</b> ${photoDesc||'(engin lýsing)'}</p>${imgTag}</div>`;
       const res=await fetch('https://api.web3forms.com/submit',{method:'POST',headers:{'Content-Type':'application/json','Accept':'application/json'},body:JSON.stringify({access_key:web3Key,subject:`📦 Tillaga frá ${userName}`,from_name:userName,message:html,html:true,botcheck:false})});
-      const data=await res.json();
-      if(!data.success) throw new Error(data.message||'villa');
+      const d=await res.json();
+      if(!d.success) throw new Error(d.message||'villa');
       showToast('✓ Tillaga send!');resetPhoto();
-    }catch(e){setPhotoErr(`Sending mistókst: ${e.message||'net villa'}`);}
+    }catch(e){setPhotoErr(`Sending mistókst: ${e.message}`);}
     finally{setPhotoSending(false);}
   };
   const resetPhoto=()=>{setPhotoFile(null);setPhotoPreview(null);setPhotoDesc('');setPhotoErr(null);setModal(null);if(photoRef.current)photoRef.current.value='';};
 
-  // ── ORDER SHARE (admin) ───────────────────────────────────────
+  // ── ORDER SHARE ───────────────────────────────
   const openOrderShare=(supName=null)=>{
     const its=supName?checkedList.filter(i=>i.sup===supName):checkedList;
     if(!its.length)return;
@@ -371,24 +424,18 @@ function App(){
     setOrderShare({to:supName?(SUP_EMAILS[supName]||ADMIN_EMAIL):ADMIN_EMAIL,subject:supName?`Pöntun ${dt} – ${its.length} vörur`:`Pöntunaryfirlit ${dt} – ${count} vörur`,body:buildOrder(its,supName)});
   };
 
-  // ── MISC ──────────────────────────────────────────────────────
+  // ── MISC ──────────────────────────────────────
   const startVoice=()=>{const SR=window.SpeechRecognition||window.webkitSpeechRecognition;if(!SR){showToast('Hljóðþekking er ekki studd');return;}const r=new SR();r.lang='is-IS';r.onstart=()=>setListening(true);r.onend=()=>setListening(false);r.onerror=()=>setListening(false);r.onresult=e=>{setQuery(e.results[0][0].transcript);setAllCats(false);};r.start();};
   const loginAdmin=()=>{const stored=localStorage.getItem('vrkst-pw')||DEFAULT_PW;if(pwInput===stored){setIsAdmin(true);setPwError(false);setPwInput('');}else setPwError(true);};
   const showToast=msg=>{setToast(msg);setTimeout(()=>setToast(null),2800);};
-  const toggle=useCallback(id=>setChecked(p=>({...p,[id]:!p[id]})),[]);
 
-  // ── DERIVED ───────────────────────────────────────────────────
-  const visible=useMemo(()=>{
-    let it=allCats?items:items.filter(i=>i.cat===cat);
-    if(supF) it=it.filter(i=>i.sup===supF);
-    if(query) it=it.filter(i=>hits(i,query));
-    return it;
-  },[items,cat,query,supF,allCats]);
+  // ── DERIVED ───────────────────────────────────
+  const visible=useMemo(()=>{let it=allCats?items:items.filter(i=>i.cat===cat);if(supF)it=it.filter(i=>i.sup===supF);if(query)it=it.filter(i=>hits(i,query));return it;},[items,cat,query,supF,allCats]);
   const grouped    =useMemo(()=>grp(visible,'sup'),[visible]);
   const checkedList=useMemo(()=>items.filter(i=>checked[i.id]),[items,checked]);
   const checkedGrp =useMemo(()=>grp(checkedList,'sup'),[checkedList]);
   const count      =checkedList.length;
-  const suppliers  =useMemo(()=>[...new Set(items.filter(i=>i.cat===cat).map(i=>i.sup))],[items,cat]);
+  const suppliers  =useMemo(()=>[...new Set(items.filter(i=>i.cat===cat).map(i=>i.sup))].[cat],[items,cat]);
 
   const Divider=({label})=>(
     <div style={{display:'flex',alignItems:'center',padding:'8px 16px 2px',gap:8}}>
@@ -396,7 +443,21 @@ function App(){
     </div>
   );
 
-  // ═══════════════ NAME SETUP ═══════════════
+  // ── SYNC STATUS indicator ─────────────────────
+  const SyncDot=()=>{
+    if(!fbUrl) return null;
+    const color = syncStatus==='synced'?C.grn : syncStatus==='error'?C.red : C.amb;
+    const cls   = syncStatus==='syncing'?'blink':'';
+    return <div title={syncStatus==='synced'?'Samstillt':syncStatus==='error'?'Samstillingarerror':'Samstilli...'} className={cls} style={{width:6,height:6,borderRadius:'50%',background:color,flexShrink:0}}/>;
+  };
+
+  // ── Notification banner ───────────────────────
+  const hasNotif = notification && notification.by && count > 0;
+  const notifTime = notification?.at ? new Date(notification.at).toLocaleString('is-IS',{hour:'2-digit',minute:'2-digit',day:'2-digit',month:'2-digit'}) : '';
+
+  // ══════════════════════════════════════
+  //  NAME SETUP
+  // ══════════════════════════════════════
   if(!nameSet) return(
     <div style={{background:C.bg,height:'100%',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',padding:32}}>
       <div style={{fontFamily:'Oxanium,sans-serif',fontSize:32,fontWeight:700,color:C.acc,marginBottom:4}}>VERKSTÆÐIÐ</div>
@@ -416,25 +477,26 @@ function App(){
     </div>
   );
 
-  // ═══════════════ MAIN APP ═══════════════
+  // ══════════════════════════════════════
+  //  MAIN APP
+  // ══════════════════════════════════════
   return(
     <div style={{background:C.bg,color:C.txt,height:'100%',maxWidth:480,margin:'0 auto',display:'flex',flexDirection:'column',overflow:'hidden',position:'relative'}}>
 
       {/* HEADER */}
       <div style={{padding:'12px 16px 10px',borderBottom:`1px solid ${C.bd}`,flexShrink:0}}>
         <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:10}}>
-          <div>
-            <div style={{fontFamily:'Oxanium,sans-serif',fontSize:24,fontWeight:700,color:C.acc,letterSpacing:1,lineHeight:1}}>VERKSTÆÐIÐ</div>
-            <div style={{fontSize:10,color:C.mut,letterSpacing:1.5,textTransform:'uppercase',marginTop:1}}>
-              {userName} {isAdmin&&<span style={{color:C.acc,fontWeight:700}}>· Admin ⚡</span>}
+          <div style={{display:'flex',alignItems:'center',gap:8}}>
+            <div>
+              <div style={{fontFamily:'Oxanium,sans-serif',fontSize:24,fontWeight:700,color:C.acc,letterSpacing:1,lineHeight:1}}>VERKSTÆÐIÐ</div>
+              <div style={{fontSize:10,color:C.mut,letterSpacing:1.5,textTransform:'uppercase',marginTop:1,display:'flex',alignItems:'center',gap:5}}>
+                {userName} {isAdmin&&<span style={{color:C.acc,fontWeight:700}}>· Admin</span>}
+                <SyncDot/>
+              </div>
             </div>
           </div>
           <div style={{display:'flex',gap:8,alignItems:'center'}}>
-            {isAdmin&&count>0&&(
-              <div style={{background:C.acc,color:'#fff',borderRadius:20,padding:'3px 10px',fontSize:13,fontWeight:600,display:'flex',alignItems:'center',gap:4}}>
-                <ICart s={13} c="#fff"/> {count}
-              </div>
-            )}
+            {isAdmin&&count>0&&<div style={{background:C.acc,color:'#fff',borderRadius:20,padding:'3px 10px',fontSize:13,fontWeight:600,display:'flex',alignItems:'center',gap:4}}><ICart s={13} c="#fff"/> {count}</div>}
             <button onClick={()=>setModal('settings')} className="tap" style={{background:'none',border:'none',color:isAdmin?C.acc:C.mut,cursor:'pointer',padding:4,display:'flex'}}>
               <IGear s={20} c={isAdmin?C.acc:C.mut}/>
             </button>
@@ -444,29 +506,26 @@ function App(){
         <div style={{display:'flex',gap:6}}>
           <div style={{flex:1,display:'flex',alignItems:'center',background:C.s1,border:`1px solid ${C.bd}`,borderRadius:10,padding:'8px 10px',gap:7}}>
             <ISearch s={14} c={C.mut}/>
-            <input value={query} onChange={e=>{setQuery(e.target.value);setAllCats(false);}}
-              onKeyDown={e=>e.key==='Enter'&&(setAllCats(true),setSupF(''))}
-              placeholder="Leita að vöru eða vörunúmeri..."
-              style={{flex:1,background:'none',border:'none',outline:'none',color:C.txt,fontSize:14,fontFamily:'inherit'}}/>
+            <input value={query} onChange={e=>{setQuery(e.target.value);setAllCats(false);}} onKeyDown={e=>e.key==='Enter'&&(setAllCats(true),setSupF(''))} placeholder="Leita..." style={{flex:1,background:'none',border:'none',outline:'none',color:C.txt,fontSize:14,fontFamily:'inherit'}}/>
             {query&&<button onClick={()=>{setQuery('');setSupF('');setAllCats(false);}} className="tap" style={{background:'none',border:'none',color:C.mut,cursor:'pointer',padding:0,display:'flex'}}><IX s={13} c={C.mut}/></button>}
           </div>
           <button onClick={startVoice} className={`tap${listening?' puls':''}`} style={{width:38,height:38,borderRadius:10,border:'none',cursor:'pointer',background:listening?C.acc:C.s1,display:'flex',alignItems:'center',justifyContent:'center'}}>
             <IMic s={15} c={listening?'#fff':C.mut}/>
           </button>
-          <button onClick={()=>{if(!loading)fetchItems();}} className="tap" style={{width:38,height:38,borderRadius:10,border:`1px solid ${C.bd}`,background:C.s1,display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer'}}>
+          <button onClick={()=>{if(!loading){fetchItems();fetchSharedState();}}} className="tap" style={{width:38,height:38,borderRadius:10,border:`1px solid ${C.bd}`,background:C.s1,display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer'}}>
             <IRefresh s={14} c={C.mut} cls={loading?'spin':''}/>
           </button>
         </div>
       </div>
 
-      {/* PRE-LOADED BANNER — shows when admin opens order link */}
-      {preLoaded>0&&(
-        <div className="anim" style={{background:'rgba(232,93,4,.12)',borderBottom:`1px solid rgba(232,93,4,.2)`,padding:'8px 16px',display:'flex',alignItems:'center',justifyContent:'space-between',flexShrink:0}}>
-          <div style={{display:'flex',alignItems:'center',gap:7}}>
-            <ILink s={14} c={C.acc}/>
-            <span style={{fontSize:12,color:C.acc,fontWeight:600}}>{preLoaded} vörur forvaldar úr pöntunarbeiðni</span>
-          </div>
-          <button onClick={()=>{setPreLoaded(0);setChecked({});}} style={{background:'none',border:'none',color:C.mut,cursor:'pointer',fontSize:11,padding:'2px 6px',fontFamily:'inherit'}}>hreinsa</button>
+      {/* NOTIFICATION BANNER — "Jón bað um pöntun · 14:30" */}
+      {hasNotif&&(
+        <div style={{background:'rgba(245,158,11,.08)',borderBottom:`1px solid rgba(245,158,11,.2)`,padding:'7px 16px',display:'flex',alignItems:'center',gap:8,flexShrink:0}}>
+          <IBell s={13} c={C.amb} cls="blink"/>
+          <span style={{fontSize:12,color:C.amb,fontWeight:600,flex:1}}>
+            {notification.by} bað um pöntun · {notifTime} · {notification.count} vörur
+          </span>
+          {isAdmin&&<button onClick={clearOrder} style={{background:'none',border:'none',color:C.mut,cursor:'pointer',fontSize:11,padding:'2px 6px',fontFamily:'inherit'}}>hreinsa eftir pöntun</button>}
         </div>
       )}
 
@@ -481,28 +540,28 @@ function App(){
               </button>
             ))}
           </div>
-          {!allCats&&(
-            <div className="hscroll">
-              {['',...suppliers].map(s=>(
-                <button key={s||'all'} className="tap" onClick={()=>setSupF(supF===s?'':s)}
-                  style={{padding:'3px 9px',borderRadius:12,fontSize:11,whiteSpace:'nowrap',fontFamily:'inherit',cursor:'pointer',border:`1px solid ${supF===s?C.acc:C.bd}`,background:supF===s?'rgba(232,93,4,.12)':'transparent',color:supF===s?C.acc:C.mut}}>
-                  {s||'Allar'}
-                </button>
-              ))}
-            </div>
-          )}
+          {!allCats&&<div className="hscroll">
+            {['',...(Array.isArray(suppliers)?suppliers:[])].map(s=>(
+              <button key={s||'all'} className="tap" onClick={()=>setSupF(supF===s?'':s)}
+                style={{padding:'3px 9px',borderRadius:12,fontSize:11,whiteSpace:'nowrap',fontFamily:'inherit',cursor:'pointer',border:`1px solid ${supF===s?C.acc:C.bd}`,background:supF===s?'rgba(232,93,4,.12)':'transparent',color:supF===s?C.acc:C.mut}}>
+                {s||'Allar'}
+              </button>
+            ))}
+          </div>}
         </div>
       )}
 
       {/* SCROLL AREA */}
       <div style={{flex:1,overflowY:'auto'}}>
 
-        {/* ═══ LIST VIEW ═══ */}
+        {/* LIST VIEW */}
         {view==='list'&&(
           <>
-            {loading&&items.length===0&&(
-              <div style={{textAlign:'center',padding:'60px 20px',color:C.mut}}>
-                <IRefresh s={32} c={C.mut} cls="spin" st={{opacity:.3}}/><div style={{fontSize:14,marginTop:12}}>Sæki vörulista...</div>
+            {loading&&items.length===0&&<div style={{textAlign:'center',padding:'60px 20px',color:C.mut}}><IRefresh s={32} c={C.mut} cls="spin" st={{opacity:.3}}/><div style={{fontSize:14,marginTop:12}}>Sæki vörulista...</div></div>}
+            {!fbUrl&&configReady&&!isAdmin&&(
+              <div style={{margin:'16px',padding:'12px 14px',background:'rgba(245,158,11,.06)',border:`1px solid rgba(245,158,11,.15)`,borderRadius:10,display:'flex',gap:10,alignItems:'flex-start'}}>
+                <IWifi s={16} c={C.amb} st={{flexShrink:0,marginTop:2}}/>
+                <div style={{fontSize:12,color:'#999',lineHeight:1.5}}>Deiling milli tækja er ekki sett upp. Admin þarf að stilla Firebase í stillingum (⚙️).</div>
               </div>
             )}
             {Object.entries(grouped).map(([sup,its])=>(
@@ -511,18 +570,20 @@ function App(){
                 {its.map(item=>(
                   <div key={item.id} style={{display:'flex',alignItems:'center',padding:'10px 16px',gap:11,
                     background:checked[item.id]?'rgba(34,197,94,.06)':'transparent',
-                    borderLeft:checked[item.id]?`3px solid ${C.grn}`:'3px solid transparent'}}>
-                    <div onClick={()=>toggle(item.id)} className="tap" style={{width:21,height:21,borderRadius:6,flexShrink:0,cursor:'pointer',
-                      border:`2px solid ${checked[item.id]?C.grn:'#3a3a3a'}`,background:checked[item.id]?C.grn:'transparent',
-                      display:'flex',alignItems:'center',justifyContent:'center',transition:'all .15s'}}>
-                      {checked[item.id]&&<ICheck s={12} c="#fff"/>}
+                    borderLeft:checked[item.id]?`3px solid ${C.grn}`:'3px solid transparent',
+                    transition:'background .12s,border-color .12s'}}>
+                    {/* Checkbox */}
+                    <div onClick={()=>toggle(item.id)} className="tap" style={{width:22,height:22,borderRadius:6,flexShrink:0,cursor:'pointer',border:`2px solid ${checked[item.id]?C.grn:'#3a3a3a'}`,background:checked[item.id]?C.grn:'transparent',display:'flex',alignItems:'center',justifyContent:'center',transition:'all .15s'}}>
+                      {checked[item.id]&&<ICheck s={13} c="#fff"/>}
                     </div>
+                    {/* Name */}
                     <div onClick={()=>toggle(item.id)} className="tap" style={{flex:1,minWidth:0,cursor:'pointer'}}>
-                      <div style={{fontSize:14,fontWeight:500,color:checked[item.id]?'#444':C.txt,textDecoration:checked[item.id]?'line-through':'none',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{item.name}</div>
+                      <div style={{fontSize:14,fontWeight:500,color:checked[item.id]?'#3a3a3a':C.txt,textDecoration:checked[item.id]?'line-through':'none',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{item.name}</div>
                       <div style={{fontSize:10,color:'#3d3d3d',marginTop:1,fontFamily:"'Fira Code',monospace",display:'flex',gap:8}}>
                         {item.sku&&<span>#{item.sku}</span>}<span>→ {item.qty}</span>
                       </div>
                     </div>
+                    {/* Admin edit/delete */}
                     {isAdmin&&(
                       <div style={{display:'flex',gap:2,flexShrink:0}}>
                         <button onClick={()=>setEditItem({...item})} className="tap" style={{background:'none',border:'none',cursor:'pointer',padding:6,display:'flex'}}><IEdit s={14} c="#555"/></button>
@@ -533,34 +594,26 @@ function App(){
                 ))}
               </div>
             ))}
-            <div style={{height:count>0?130:80}}/>
+            <div style={{height:count>0?140:80}}/>
           </>
         )}
 
-        {/* ═══ ORDER VIEW (admin only) ═══ */}
+        {/* ORDER VIEW (admin only) */}
         {view==='order'&&isAdmin&&(
           <>
             {count===0
-              ?<div style={{textAlign:'center',padding:'80px 20px',color:C.mut}}><ICart s={48} c={C.mut} st={{opacity:.12}}/><div style={{fontSize:16,marginTop:14}}>Pöntunin er tóm</div><div style={{fontSize:13,marginTop:7}}>Farðu á lagerlista og hakaðu við vörur</div></div>
+              ?<div style={{textAlign:'center',padding:'80px 20px',color:C.mut}}><ICart s={48} c={C.mut} st={{opacity:.12}}/><div style={{fontSize:16,marginTop:14}}>Pöntunin er tóm</div></div>
               :(
                 <>
                   {Object.entries(checkedGrp).map(([sup,its])=>(
                     <div key={sup} style={{margin:'12px 16px 0',background:C.s1,borderRadius:12,border:`1px solid ${C.bd}`,overflow:'hidden'}}>
                       <div style={{padding:'10px 14px 8px',borderBottom:`1px solid ${C.bd}`,display:'flex',alignItems:'center',justifyContent:'space-between'}}>
-                        <div>
-                          <div style={{fontWeight:600,fontSize:14}}>{sup}</div>
-                          {SUP_EMAILS[sup]&&<div style={{fontSize:10,color:C.mut,fontFamily:"'Fira Code',monospace",marginTop:1}}>{SUP_EMAILS[sup]}</div>}
-                        </div>
-                        <button onClick={()=>openOrderShare(sup)} className="tap" style={{background:'rgba(232,93,4,.1)',border:'1px solid rgba(232,93,4,.25)',color:C.acc,padding:'5px 11px',borderRadius:8,fontSize:11,fontWeight:600,cursor:'pointer',display:'flex',alignItems:'center',gap:4,fontFamily:'inherit'}}>
-                          <IMail s={11} c={C.acc}/> Senda
-                        </button>
+                        <div><div style={{fontWeight:600,fontSize:14}}>{sup}</div>{SUP_EMAILS[sup]&&<div style={{fontSize:10,color:C.mut,fontFamily:"'Fira Code',monospace",marginTop:1}}>{SUP_EMAILS[sup]}</div>}</div>
+                        <button onClick={()=>openOrderShare(sup)} className="tap" style={{background:'rgba(232,93,4,.1)',border:'1px solid rgba(232,93,4,.25)',color:C.acc,padding:'5px 11px',borderRadius:8,fontSize:11,fontWeight:600,cursor:'pointer',display:'flex',alignItems:'center',gap:4,fontFamily:'inherit'}}><IMail s={11} c={C.acc}/> Senda</button>
                       </div>
                       {its.map((item,i)=>(
                         <div key={item.id} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'8px 14px',borderBottom:i<its.length-1?`1px solid ${C.bd}`:'none'}}>
-                          <div style={{flex:1,minWidth:0}}>
-                            <div style={{fontSize:13,fontWeight:500,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{item.name}</div>
-                            <div style={{fontSize:10,color:C.mut,fontFamily:"'Fira Code',monospace",marginTop:1}}>{item.sku?`#${item.sku} · `:''}{item.qty}</div>
-                          </div>
+                          <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:500,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{item.name}</div><div style={{fontSize:10,color:C.mut,fontFamily:"'Fira Code',monospace",marginTop:1}}>{item.sku?`#${item.sku} · `:''}{item.qty}</div></div>
                           <button onClick={()=>toggle(item.id)} className="tap" style={{background:'none',border:'none',cursor:'pointer',padding:4,display:'flex',marginLeft:8}}><IX s={13} c="#555"/></button>
                         </div>
                       ))}
@@ -570,8 +623,8 @@ function App(){
                     <button onClick={()=>openOrderShare()} className="tap" style={{width:'100%',padding:14,borderRadius:12,border:'none',background:C.acc,color:'#fff',fontSize:14,fontWeight:600,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:8,fontFamily:'inherit'}}>
                       <IMail s={16} c="#fff"/> Senda yfirlit til mín · {count} vörur
                     </button>
-                    <button onClick={()=>{setChecked({});setPreLoaded(0);showToast('Pöntun hreinsuð');}} className="tap" style={{width:'100%',padding:12,borderRadius:12,background:'transparent',border:`1px solid #2a2a2a`,color:C.mut,fontSize:13,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:7,fontFamily:'inherit'}}>
-                      <ITrash s={13} c={C.mut}/> Hreinsa allt
+                    <button onClick={clearOrder} className="tap" style={{width:'100%',padding:12,borderRadius:12,background:'transparent',border:`1px solid #2a2a2a`,color:C.mut,fontSize:13,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:7,fontFamily:'inherit'}}>
+                      <ITrash s={13} c={C.mut}/> Hreinsa pöntun (eftir sendingu)
                     </button>
                   </div>
                   <div style={{height:80}}/>
@@ -594,24 +647,13 @@ function App(){
         )}
       </div>
 
-      {/* ═══ FLOATING BUTTONS ═══ */}
+      {/* FABs */}
       <input ref={photoRef} type="file" accept="image/*" capture="environment" style={{display:'none'}} onChange={onPhotoChange}/>
-
-      {/* Camera / tillaga button */}
       <button onClick={()=>photoRef.current&&photoRef.current.click()} className="tap"
         style={{position:'absolute',right:16,bottom:count>0&&!isAdmin?134:74,background:C.s1,border:`1px solid ${C.bd}`,borderRadius:14,padding:'9px 13px',display:'flex',alignItems:'center',gap:7,cursor:'pointer',boxShadow:'0 4px 16px rgba(0,0,0,.5)',zIndex:10}}>
         <ICamera s={16} c={C.acc}/><span style={{fontSize:12,fontWeight:600,color:C.txt,whiteSpace:'nowrap'}}>Senda inn tillögu af vöru</span>
       </button>
-
-      {/* Admin: add item button */}
-      {isAdmin&&(
-        <button onClick={()=>setModal('addItem')} className="tap"
-          style={{position:'absolute',left:16,bottom:74,background:C.s1,border:`1px solid ${C.bd}`,borderRadius:14,padding:'9px 13px',display:'flex',alignItems:'center',gap:7,cursor:'pointer',boxShadow:'0 4px 16px rgba(0,0,0,.5)',zIndex:10}}>
-          <IPlus s={16} c={C.acc}/><span style={{fontSize:12,fontWeight:600,color:C.txt}}>Bæta við vöru</span>
-        </button>
-      )}
-
-      {/* User: Láta vita (only when items checked + not admin) */}
+      {isAdmin&&<button onClick={()=>setModal('addItem')} className="tap" style={{position:'absolute',left:16,bottom:74,background:C.s1,border:`1px solid ${C.bd}`,borderRadius:14,padding:'9px 13px',display:'flex',alignItems:'center',gap:7,cursor:'pointer',boxShadow:'0 4px 16px rgba(0,0,0,.5)',zIndex:10}}><IPlus s={16} c={C.acc}/><span style={{fontSize:12,fontWeight:600,color:C.txt}}>Bæta við vöru</span></button>}
       {!isAdmin&&count>0&&(
         <div className="anim" style={{position:'absolute',bottom:74,left:16,right:16,zIndex:20}}>
           <button onClick={sendNotification} disabled={notifSending} className="tap"
@@ -621,68 +663,72 @@ function App(){
         </div>
       )}
 
-      {/* ═══════════════ MODALS ═══════════════ */}
+      {/* ══════════════ MODALS ══════════════ */}
 
       {/* SETTINGS */}
       {modal==='settings'&&(
         <Sheet onClose={()=>setModal(null)}>
           <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:16}}>
-            <div style={{width:38,height:38,borderRadius:'50%',background:isAdmin?C.acc:C.s2,border:`2px solid ${isAdmin?C.acc:C.bd}`,display:'flex',alignItems:'center',justifyContent:'center'}}>
-              {isAdmin?<IShield s={18} c="#fff"/>:<IUser s={18} c={C.mut}/>}
-            </div>
-            <div>
-              <div style={{fontSize:14,fontWeight:600}}>{userName}</div>
-              <div style={{fontSize:11,color:isAdmin?C.acc:C.mut}}>{isAdmin?'Admin':'Notandi'}</div>
-            </div>
+            <div style={{width:38,height:38,borderRadius:'50%',background:isAdmin?C.acc:C.s2,border:`2px solid ${isAdmin?C.acc:C.bd}`,display:'flex',alignItems:'center',justifyContent:'center'}}>{isAdmin?<IShield s={18} c="#fff"/>:<IUser s={18} c={C.mut}/>}</div>
+            <div><div style={{fontSize:14,fontWeight:600}}>{userName}</div><div style={{fontSize:11,color:isAdmin?C.acc:C.mut}}>{isAdmin?'Admin':'Notandi'}</div></div>
           </div>
           <Field label="Nafn" value={userName} onChange={v=>{setUserName(v);localStorage.setItem('vrkst-name',v);}} placeholder="Nafn þitt"/>
-
           <div style={{height:1,background:C.bd,margin:'12px 0'}}/>
-
           {!isAdmin?(
             <>
-              <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:10}}>
-                <ILock s={14} c={C.mut}/><span style={{fontSize:12,color:C.mut}}>Admin innskráning</span>
-              </div>
-              <Field label="Lykilorð" value={pwInput} onChange={setPwInput} placeholder="Admin lykilorð" type="password"
-                action={{label:'Innskrá',fn:loginAdmin}}/>
+              <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:10}}><ILock s={14} c={C.mut}/><span style={{fontSize:12,color:C.mut}}>Admin innskráning</span></div>
+              <Field label="Lykilorð" value={pwInput} onChange={setPwInput} placeholder="Admin lykilorð" type="password" action={{label:'Innskrá',fn:loginAdmin}}/>
               {pwError&&<div style={{fontSize:12,color:C.red,marginTop:-8,marginBottom:8}}>Rangt lykilorð</div>}
             </>
           ):(
             <>
-              <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:14}}>
-                <IKey s={14} c={C.acc}/><span style={{fontSize:13,color:C.acc,fontWeight:600}}>Admin stillingar</span>
-                <button onClick={()=>setIsAdmin(false)} style={{marginLeft:'auto',background:'none',border:'none',color:C.mut,cursor:'pointer',fontSize:11,padding:'4px 8px',borderRadius:6,fontFamily:'inherit'}}>Útskrá</button>
-              </div>
+              <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:16}}><IKey s={14} c={C.acc}/><span style={{fontSize:13,color:C.acc,fontWeight:600}}>Admin stillingar</span><button onClick={()=>setIsAdmin(false)} style={{marginLeft:'auto',background:'none',border:'none',color:C.mut,cursor:'pointer',fontSize:11,padding:'4px 8px',borderRadius:6,fontFamily:'inherit'}}>Útskrá</button></div>
 
               <Field label="Nýtt lykilorð" value={newPw} onChange={setNewPw} placeholder="Breyta lykilorði" type="password"
                 action={newPw?{label:'Vista',fn:()=>{localStorage.setItem('vrkst-pw',newPw);setNewPw('');showToast('✓ Lykilorð breytt!');}}:undefined}/>
 
               <div style={{height:1,background:C.bd,margin:'8px 0 14px'}}/>
 
-              {/* Web3Forms key — the key step */}
-              <div style={{background:'rgba(34,197,94,.06)',border:`1px solid rgba(34,197,94,.2)`,borderRadius:10,padding:'12px 14px',marginBottom:12}}>
-                <div style={{fontSize:11,color:C.grn,fontWeight:600,marginBottom:6}}>WEB3FORMS LYKILL</div>
-                {web3Key
-                  ?<div style={{fontSize:12,color:C.grn,display:'flex',alignItems:'center',gap:6}}><ICheck s={13} c={C.grn}/> Virkur — allir notendur geta sent tilkynningar</div>
-                  :<div style={{fontSize:12,color:'#888',lineHeight:1.5}}>Lykillinn vantar.<br/>
-                    1. Farðu á <b style={{color:C.acc}}>web3forms.com</b><br/>
-                    2. Settu inn atlireynir@gmail.com → "Create Access Key"<br/>
-                    3. Þú færð lykil í tölvupósti í 1 mín<br/>
-                    4. Límdu hann hér:
+              {/* Firebase setup */}
+              <div style={{background:'rgba(255,170,0,.06)',border:'1px solid rgba(255,170,0,.15)',borderRadius:10,padding:'12px 14px',marginBottom:14}}>
+                <div style={{fontSize:11,color:'#fbbf24',fontWeight:600,marginBottom:8}}>🔥 FIREBASE — DEILING MILLI TÆKJA</div>
+                {fbUrl
+                  ?<div style={{fontSize:12,color:C.grn,display:'flex',alignItems:'center',gap:6}}><ICheck s={13} c={C.grn}/> Virkur — hakarnir deila sér á milli allra tækja</div>
+                  :<div style={{fontSize:12,color:'#888',lineHeight:1.7}}>
+                    Ókeypis, ótakmarkaðar beiðnir. Bara þörf á einum URL.<br/>
+                    1. <b style={{color:'#fbbf24'}}>console.firebase.google.com</b> → Add project<br/>
+                    2. Build → Realtime Database → Create database<br/>
+                    3. Veldu "Start in test mode" → Enable<br/>
+                    4. Afritaðu Database URL (t.d. https://xxx-default-rtdb.firebaseio.com)<br/>
+                    5. Límdu hér:
                   </div>
                 }
               </div>
-              <Field value={newW3} onChange={setNewW3} placeholder={web3Key?'Setja inn nýjan lykil':'0770fd86-83a6-48ce-ac8f-ff2087194e50'} mono
-                action={newW3.trim()?{label:saving?'...':'Vista á GitHub',fn:()=>saveConfig(newW3.trim())}:undefined}/>
-              {!ghToken&&newW3&&<div style={{fontSize:11,color:'#888',marginTop:-8,marginBottom:8}}>GitHub token þarf líka til að vista (sjá neðar)</div>}
+              <Field label="Firebase Database URL" value={settFbUrl} onChange={setSettFbUrl} placeholder={fbUrl||'https://your-project-default-rtdb.firebaseio.com'} mono small/>
 
               <div style={{height:1,background:C.bd,margin:'8px 0 14px'}}/>
 
-              <Field label="GitHub token (til að breyta vörum og vista config)"
-                value={ghToken} onChange={v=>{setGhToken(v);localStorage.setItem('vrkst-token',v);}}
-                placeholder="ghp_xxxxxxxxxxxx" mono
-                hint={ghToken?'✓ Token virkur':'github.com → Settings → Developer settings → Tokens (classic) → Generate (repo scope)'}/>
+              {/* Web3Forms */}
+              <div style={{background:'rgba(34,197,94,.06)',border:`1px solid rgba(34,197,94,.15)`,borderRadius:10,padding:'12px 14px',marginBottom:14}}>
+                <div style={{fontSize:11,color:C.grn,fontWeight:600,marginBottom:4}}>WEB3FORMS (tölvupóstlykill)</div>
+                {web3Key?<div style={{fontSize:12,color:C.grn,display:'flex',alignItems:'center',gap:6}}><ICheck s={13} c={C.grn}/> Virkur</div>:<div style={{fontSize:12,color:'#888'}}>web3forms.com → settu inn atlireynir@gmail.com → "Create Access Key"</div>}
+              </div>
+              <Field label="Web3Forms lykill" value={settW3} onChange={setSettW3} placeholder={web3Key?'•••••••••':'xxxxxxxx-xxxx-...'} small/>
+
+              <div style={{height:1,background:C.bd,margin:'8px 0 14px'}}/>
+
+              {/* GitHub token */}
+              <Field label="GitHub token (til að breyta vörum)" value={ghToken} onChange={v=>{setGhToken(v);localStorage.setItem('vrkst-token',v);}} placeholder="ghp_xxxxxxxxxxxx" mono small
+                hint={ghToken?'✓ Virkur':'github.com → Settings → Developer settings → Tokens (classic) → repo scope'}/>
+
+              {/* Save all to config.json */}
+              {(settW3||settFbUrl)&&(
+                <button onClick={()=>saveConfig({w3:settW3,fbUrl:settFbUrl})} disabled={saving||!ghToken} className="tap"
+                  style={{width:'100%',padding:12,borderRadius:10,border:'none',background:ghToken?C.acc:'#333',color:'#fff',fontSize:13,fontWeight:600,cursor:ghToken?'pointer':'default',display:'flex',alignItems:'center',justifyContent:'center',gap:7,fontFamily:'inherit',marginTop:4}}>
+                  {saving?<IRefresh s={14} c="#fff" cls="spin"/>:<ICheck s={14} c="#fff"/>}
+                  {saving?'Vista...':'Vista á GitHub (allir uppfærðir)'}
+                </button>
+              )}
             </>
           )}
         </Sheet>
@@ -697,23 +743,19 @@ function App(){
           <div style={{marginBottom:12}}>
             <div style={{fontSize:11,color:C.mut,letterSpacing:1,textTransform:'uppercase',marginBottom:4}}>Flokkur</div>
             <div style={{display:'flex',gap:8}}>
-              {['Efnavörur','Perur'].map(c=>(
-                <button key={c} onClick={()=>setNewItem(p=>({...p,cat:c}))} className="tap" style={{flex:1,padding:'8px',borderRadius:8,border:`1px solid ${newItem.cat===c?C.acc:C.bd}`,background:newItem.cat===c?'rgba(232,93,4,.12)':'transparent',color:newItem.cat===c?C.acc:C.mut,fontSize:13,cursor:'pointer',fontFamily:'inherit'}}>{c}</button>
-              ))}
+              {['Efnavörur','Perur'].map(c=><button key={c} onClick={()=>setNewItem(p=>({...p,cat:c}))} className="tap" style={{flex:1,padding:'8px',borderRadius:8,border:`1px solid ${newItem.cat===c?C.acc:C.bd}`,background:newItem.cat===c?'rgba(232,93,4,.12)':'transparent',color:newItem.cat===c?C.acc:C.mut,fontSize:13,cursor:'pointer',fontFamily:'inherit'}}>{c}</button>)}
             </div>
           </div>
           <div style={{marginBottom:12}}>
             <div style={{fontSize:11,color:C.mut,letterSpacing:1,textTransform:'uppercase',marginBottom:4}}>Birgir</div>
-            <select value={newItem.sup} onChange={e=>setNewItem(p=>({...p,sup:e.target.value}))}
-              style={{width:'100%',background:C.s2,border:`1px solid ${C.bd}`,borderRadius:8,padding:'10px 12px',color:C.txt,fontSize:14,fontFamily:'inherit',outline:'none'}}>
+            <select value={newItem.sup} onChange={e=>setNewItem(p=>({...p,sup:e.target.value}))} style={{width:'100%',background:C.s2,border:`1px solid ${C.bd}`,borderRadius:8,padding:'10px 12px',color:C.txt,fontSize:14,fontFamily:'inherit',outline:'none'}}>
               {ALL_SUPS.map(s=><option key={s} value={s}>{s}</option>)}
             </select>
           </div>
           <Field label="Pöntunarmagn *" value={newItem.qty} onChange={v=>setNewItem(p=>({...p,qty:v}))} placeholder="t.d. 2 brúsar"/>
-          <div style={{display:'flex',gap:8,marginTop:4}}>
+          <div style={{display:'flex',gap:8}}>
             <button onClick={()=>setModal(null)} className="tap" style={{flex:1,padding:12,borderRadius:10,border:`1px solid ${C.bd}`,background:'none',color:C.mut,fontSize:13,cursor:'pointer',fontFamily:'inherit'}}>Hætta við</button>
-            <button onClick={addItem} disabled={saving||!newItem.name||!newItem.qty} className="tap"
-              style={{flex:2,padding:12,borderRadius:10,border:'none',background:newItem.name&&newItem.qty?C.acc:'#333',color:'#fff',fontSize:13,fontWeight:600,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:6,fontFamily:'inherit'}}>
+            <button onClick={addItem} disabled={saving||!newItem.name||!newItem.qty} className="tap" style={{flex:2,padding:12,borderRadius:10,border:'none',background:newItem.name&&newItem.qty?C.acc:'#333',color:'#fff',fontSize:13,fontWeight:600,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:6,fontFamily:'inherit'}}>
               {saving?<IRefresh s={14} c="#fff" cls="spin"/>:<IPlus s={14} c="#fff"/>}{saving?'Vista...':'Bæta við'}
             </button>
           </div>
@@ -728,32 +770,27 @@ function App(){
           <Field label="Vörunúmer" value={editItem.sku||''} onChange={v=>setEditItem(p=>({...p,sku:v}))} placeholder="VNR" mono/>
           <div style={{marginBottom:12}}>
             <div style={{fontSize:11,color:C.mut,letterSpacing:1,textTransform:'uppercase',marginBottom:4}}>Flokkur</div>
-            <div style={{display:'flex',gap:8}}>
-              {['Efnavörur','Perur'].map(c=>(
-                <button key={c} onClick={()=>setEditItem(p=>({...p,cat:c}))} className="tap" style={{flex:1,padding:'8px',borderRadius:8,border:`1px solid ${editItem.cat===c?C.acc:C.bd}`,background:editItem.cat===c?'rgba(232,93,4,.12)':'transparent',color:editItem.cat===c?C.acc:C.mut,fontSize:13,cursor:'pointer',fontFamily:'inherit'}}>{c}</button>
-              ))}
-            </div>
+            <div style={{display:'flex',gap:8}}>{['Efnavörur','Perur'].map(c=><button key={c} onClick={()=>setEditItem(p=>({...p,cat:c}))} className="tap" style={{flex:1,padding:'8px',borderRadius:8,border:`1px solid ${editItem.cat===c?C.acc:C.bd}`,background:editItem.cat===c?'rgba(232,93,4,.12)':'transparent',color:editItem.cat===c?C.acc:C.mut,fontSize:13,cursor:'pointer',fontFamily:'inherit'}}>{c}</button>)}</div>
           </div>
           <div style={{marginBottom:12}}>
             <div style={{fontSize:11,color:C.mut,letterSpacing:1,textTransform:'uppercase',marginBottom:4}}>Birgir</div>
-            <select value={editItem.sup} onChange={e=>setEditItem(p=>({...p,sup:e.target.value}))}
-              style={{width:'100%',background:C.s2,border:`1px solid ${C.bd}`,borderRadius:8,padding:'10px 12px',color:C.txt,fontSize:14,fontFamily:'inherit',outline:'none'}}>
+            <select value={editItem.sup} onChange={e=>setEditItem(p=>({...p,sup:e.target.value}))} style={{width:'100%',background:C.s2,border:`1px solid ${C.bd}`,borderRadius:8,padding:'10px 12px',color:C.txt,fontSize:14,fontFamily:'inherit',outline:'none'}}>
               {ALL_SUPS.map(s=><option key={s} value={s}>{s}</option>)}
             </select>
           </div>
           <Field label="Magn *" value={editItem.qty} onChange={v=>setEditItem(p=>({...p,qty:v}))} placeholder="t.d. 2 brúsar"/>
-          <div style={{display:'flex',gap:8,marginTop:4}}>
+          <div style={{display:'flex',gap:8}}>
             <button onClick={()=>setEditItem(null)} className="tap" style={{flex:1,padding:12,borderRadius:10,border:`1px solid ${C.bd}`,background:'none',color:C.mut,fontSize:13,cursor:'pointer',fontFamily:'inherit'}}>Hætta við</button>
             <button onClick={saveEdit} disabled={saving} className="tap" style={{flex:2,padding:12,borderRadius:10,border:'none',background:C.acc,color:'#fff',fontSize:13,fontWeight:600,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:6,fontFamily:'inherit'}}>
-              {saving?<IRefresh s={14} c="#fff" cls="spin"/>:<ICheck s={14} c="#fff"/>}{saving?'Vista...':'Vista breytingar'}
+              {saving?<IRefresh s={14} c="#fff" cls="spin"/>:<ICheck s={14} c="#fff"/>}{saving?'Vista...':'Vista'}
             </button>
           </div>
         </Sheet>
       )}
 
-      {/* DELETE CONFIRM */}
+      {/* DELETE */}
       {delId&&(
-        <div style={{position:'absolute',inset:0,background:'rgba(0,0,0,.85)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:220,padding:24}}>
+        <div style={{position:'absolute',inset:0,background:'rgba(0,0,0,.87)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:220,padding:24}}>
           <div className="pop" style={{background:C.s1,borderRadius:18,padding:'28px 24px',border:`1px solid ${C.bd}`,width:'100%',maxWidth:340,textAlign:'center'}}>
             <ITrash s={32} c={C.red} st={{marginBottom:14}}/>
             <div style={{fontWeight:700,fontSize:17,marginBottom:8}}>Eyða vöru?</div>
@@ -768,46 +805,40 @@ function App(){
         </div>
       )}
 
-      {/* PHOTO SUBMISSION */}
+      {/* PHOTO */}
       {modal==='photo'&&(
         <div onClick={()=>!photoSending&&resetPhoto()} style={{position:'absolute',inset:0,background:'rgba(0,0,0,.87)',display:'flex',flexDirection:'column',justifyContent:'flex-end',zIndex:200}}>
           <div onClick={e=>e.stopPropagation()} className="sheet" style={{background:C.s1,borderRadius:'18px 18px 0 0',padding:'20px 16px 38px',border:`1px solid ${C.bd}`}}>
             <div style={{width:36,height:4,background:'#333',borderRadius:2,margin:'0 auto 16px'}}/>
             <div style={{fontWeight:700,fontSize:17,marginBottom:4}}>Senda inn tillögu af vöru</div>
-            <div style={{fontSize:12,color:C.mut,marginBottom:14}}>Mynd og lýsing fara til yfirmanns · {userName}</div>
-            {photoPreview&&(
-              <div style={{position:'relative',marginBottom:12}}>
-                <img src={photoPreview} alt="preview" style={{width:'100%',borderRadius:10,maxHeight:200,objectFit:'cover'}}/>
-                <button onClick={()=>photoRef.current&&photoRef.current.click()} className="tap" style={{position:'absolute',bottom:8,right:8,background:'rgba(0,0,0,.7)',border:'none',borderRadius:8,padding:'6px 10px',color:'#fff',fontSize:11,cursor:'pointer',display:'flex',alignItems:'center',gap:5,fontFamily:'inherit'}}>
-                  <ICamera s={12} c="#fff"/> Önnur mynd
-                </button>
-              </div>
-            )}
+            <div style={{fontSize:12,color:C.mut,marginBottom:14}}>{userName} → {adminName}</div>
+            {photoPreview&&<div style={{position:'relative',marginBottom:12}}>
+              <img src={photoPreview} alt="preview" style={{width:'100%',borderRadius:10,maxHeight:200,objectFit:'cover'}}/>
+              <button onClick={()=>photoRef.current&&photoRef.current.click()} className="tap" style={{position:'absolute',bottom:8,right:8,background:'rgba(0,0,0,.7)',border:'none',borderRadius:8,padding:'6px 10px',color:'#fff',fontSize:11,cursor:'pointer',display:'flex',alignItems:'center',gap:5,fontFamily:'inherit'}}><ICamera s={12} c="#fff"/> Önnur mynd</button>
+            </div>}
             <div style={{marginBottom:14}}>
-              <div style={{fontSize:11,color:C.mut,letterSpacing:1,textTransform:'uppercase',marginBottom:4}}>Lýsing / nafn vöru</div>
-              <textarea value={photoDesc} onChange={e=>setPhotoDesc(e.target.value)} placeholder="Hvað er þetta? Hvar er það notað?" rows={3}
-                style={{width:'100%',background:C.s2,border:`1px solid ${C.bd}`,borderRadius:8,padding:'10px 12px',color:C.txt,fontSize:14,fontFamily:'inherit',outline:'none',resize:'none'}}/>
+              <div style={{fontSize:11,color:C.mut,letterSpacing:1,textTransform:'uppercase',marginBottom:4}}>Lýsing</div>
+              <textarea value={photoDesc} onChange={e=>setPhotoDesc(e.target.value)} placeholder="Hvað er þetta? Hvar er það notað?" rows={3} style={{width:'100%',background:C.s2,border:`1px solid ${C.bd}`,borderRadius:8,padding:'10px 12px',color:C.txt,fontSize:14,fontFamily:'inherit',outline:'none',resize:'none'}}/>
             </div>
-            {photoErr&&<div style={{fontSize:12,color:C.red,marginBottom:12,lineHeight:1.5}}>{photoErr}</div>}
+            {photoErr&&<div style={{fontSize:12,color:C.red,marginBottom:12}}>{photoErr}</div>}
             <div style={{display:'flex',gap:8}}>
               <button onClick={resetPhoto} disabled={photoSending} className="tap" style={{flex:1,padding:12,borderRadius:10,border:`1px solid ${C.bd}`,background:'none',color:C.mut,fontSize:13,cursor:'pointer',fontFamily:'inherit',opacity:photoSending?.5:1}}>Hætta við</button>
               <button onClick={sendPhoto} disabled={photoSending} className="tap" style={{flex:2,padding:12,borderRadius:10,border:'none',background:C.acc,color:'#fff',fontSize:13,fontWeight:600,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:7,fontFamily:'inherit',opacity:photoSending?.7:1}}>
-                {photoSending?<IRefresh s={14} c="#fff" cls="spin"/>:<ICamera s={14} c="#fff"/>}
-                {photoSending?'Sendi...':'Senda tillögu'}
+                {photoSending?<IRefresh s={14} c="#fff" cls="spin"/>:<ICamera s={14} c="#fff"/>}{photoSending?'Sendi...':'Senda tillögu'}
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* ORDER SHARE (admin) */}
+      {/* ORDER SHARE */}
       {orderShare&&(
         <Sheet onClose={()=>setOrderShare(null)}>
           <div style={{fontWeight:700,fontSize:17,marginBottom:3}}>Senda pöntun</div>
           <div style={{fontSize:11,color:C.mut,fontFamily:"'Fira Code',monospace",marginBottom:12}}>{orderShare.to}</div>
           <div style={{background:C.bg,borderRadius:10,padding:'10px 12px',fontSize:11,fontFamily:"'Fira Code',monospace",color:'#888',maxHeight:160,overflowY:'auto',marginBottom:14,whiteSpace:'pre-wrap',border:`1px solid ${C.bd}`,lineHeight:1.6}}>{orderShare.body}</div>
           <div style={{display:'flex',flexDirection:'column',gap:8}}>
-            {navigator.share&&<button onClick={()=>navigator.share({title:orderShare.subject,text:orderShare.body}).catch(()=>{})} className="tap" style={{width:'100%',padding:13,borderRadius:12,border:'none',background:C.acc,color:'#fff',fontSize:14,fontWeight:600,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:8,fontFamily:'inherit'}}><IShare s={16} c="#fff"/> Deila (tölvupóstur / WhatsApp...)</button>}
+            {navigator.share&&<button onClick={()=>navigator.share({title:orderShare.subject,text:orderShare.body}).catch(()=>{})} className="tap" style={{width:'100%',padding:13,borderRadius:12,border:'none',background:C.acc,color:'#fff',fontSize:14,fontWeight:600,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:8,fontFamily:'inherit'}}><IShare s={16} c="#fff"/> Deila</button>}
             <button onClick={()=>navigator.clipboard.writeText(orderShare.body).then(()=>showToast('✓ Afritað')).catch(()=>{})} className="tap" style={{width:'100%',padding:12,borderRadius:12,border:`1px solid ${C.bd}`,background:C.s2,color:C.txt,fontSize:13,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:7,fontFamily:'inherit'}}><ICopy s={14} c={C.txt}/> Afrita</button>
             <button onClick={()=>window.open(`mailto:${orderShare.to}?subject=${encodeURIComponent(orderShare.subject)}&body=${encodeURIComponent(orderShare.body)}`)} className="tap" style={{width:'100%',padding:12,borderRadius:12,border:`1px solid ${C.bd}`,background:'transparent',color:C.mut,fontSize:13,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:7,fontFamily:'inherit'}}><IMail s={14} c={C.mut}/> Opna í tölvupósti</button>
           </div>
@@ -821,10 +852,12 @@ function App(){
             <div style={{fontSize:60,marginBottom:16}}>✅</div>
             <div style={{fontFamily:'Oxanium,sans-serif',fontSize:22,fontWeight:700,color:C.grn,marginBottom:10}}>Tilkynning send!</div>
             <div style={{fontSize:15,color:C.txt,lineHeight:1.6,marginBottom:6}}>
-              <span style={{color:C.acc,fontWeight:700}}>{adminName}</span> hefur fengið tilkynningu um að panta vörur fyrir þig
+              <span style={{color:C.acc,fontWeight:700}}>{adminName}</span> hefur fengið tilkynningu um að panta vörur
             </div>
-            <div style={{fontSize:12,color:C.mut,marginBottom:28}}>{count} vörur á listanum · hann fær hlekk til að opna pöntunina</div>
-            <button onClick={()=>{setNotifDone(false);setChecked({});}} className="tap"
+            <div style={{fontSize:12,color:C.mut,marginBottom:28,lineHeight:1.5}}>
+              Hakarnir haldast á listanum.<br/>Þegar {adminName} sendir pöntunina verða þeir hreinsaðir.
+            </div>
+            <button onClick={()=>setNotifDone(false)} className="tap"
               style={{width:'100%',padding:14,borderRadius:12,border:'none',background:C.acc,color:'#fff',fontSize:15,fontWeight:600,cursor:'pointer',fontFamily:'inherit'}}>
               Allt í lagi 👍
             </button>
