@@ -48,6 +48,20 @@ const DEFAULT_PW = 'admin123';
 const SUP_EMAILS = {"Jákó":"jako@jako.is","Kemi":"kemi@kemi.is","Tandur":"Tandur@tandur.is","Wurth":"Benni@wurth.is","Bosch":"kemi@kemi.is","Philips":"kemi@kemi.is"};
 const ALL_SUPS   = ['Jákó','Kemi','Tandur','Wurth','Bosch','Philips'];
 
+// Random hvatningarorð — birtast eftir að "Láta vita" er sent
+const HVATNINGAR = [
+  "Vel gert! Svona á að halda vörulagernum gangandi 💪",
+  "Frábært framtak — takk fyrir að láta vita í tíma! 🙌",
+  "Svona eiga hetjur verkstæðisins að vinna 🔧",
+  "Þú ert að gera verkstæðið betra með hverri tilkynningu ⭐",
+  "Flott hjá þér! Aldrei skaðar að láta vita of snemma en of seint 👏",
+  "Til hamingju — þú komst boltanum í hreyfingu! 🚀",
+  "Nákvæmlega svona virkar teymisvinna best 🤝",
+  "Þú átt hrós skilið fyrir að fylgjast með lagernum 🏆",
+  "Verkstæðið þakkar þér kærlega fyrir árvekni þína ✨",
+  "Svona lítil skref halda öllu gangandi snurðulaust 🎯",
+];
+
 // ══════════════════════════════════════════════
 //  FIREBASE — deilður stöðugrunnur milli tækja
 //  Ókeypis, ótakmarkaðar beiðnir, einn URL
@@ -66,6 +80,17 @@ const fbWrite = async (fbUrl, data) => {
     body: JSON.stringify(data)
   });
   if(!res.ok) throw new Error(`Firebase write villa: ${res.status}`);
+};
+
+// PATCH updates only the given keys, leaving the rest of /state untouched —
+// safe for updating "checked" without ever wiping "notification".
+const fbPatch = async (fbUrl, partial) => {
+  const res = await fetch(`${fbUrl}/state.json`, {
+    method: 'PATCH',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(partial)
+  });
+  if(!res.ok) throw new Error(`Firebase patch villa: ${res.status}`);
 };
 
 // ══════════════════════════════════════════════
@@ -188,6 +213,8 @@ function App(){
   // Notification flow
   const [notifSending,setNotifSending]= useState(false);
   const [notifDone,  setNotifDone]  = useState(false);
+  const [hvatning,   setHvatning]   = useState('');
+  const confettiRef = useRef(null);
 
   // Admin
   const [ghToken,    setGhToken]    = useState('');
@@ -249,7 +276,7 @@ function App(){
     try{
       const state = await fbRead(fbUrl);
       if(state.checked) setChecked(state.checked);
-      if(state.notification) setNotification(state.notification);
+      if(state.notification!==undefined) setNotification(state.notification);
       lastWritten.current = JSON.stringify(state.checked||{});
       setSyncStatus('synced');
     }catch(e){
@@ -257,30 +284,62 @@ function App(){
     }
   };
 
+  // ── LIVE SYNC (Firebase SSE) ────────────────────
+  // Streams changes from ANY device the instant they happen —
+  // this is what makes checkboxes sync between phones in real time.
+  useEffect(()=>{
+    if(!fbUrl) return;
+    let es;
+    try{
+      es = new EventSource(`${fbUrl}/state.json`);
+      const applyData = (data)=>{
+        if(!data||typeof data!=='object') return;
+        if(data.checked!==undefined){
+          const nc = data.checked||{};
+          setChecked(nc);
+          lastWritten.current = JSON.stringify(nc);
+        }
+        if(data.notification!==undefined) setNotification(data.notification);
+      };
+      es.addEventListener('put', e=>{
+        try{
+          const msg = JSON.parse(e.data);
+          // Root update — msg.data is the full state object
+          if(msg.path==='/') applyData(msg.data);
+          else if(msg.path==='/checked'){ setChecked(msg.data||{}); lastWritten.current=JSON.stringify(msg.data||{}); }
+          else if(msg.path==='/notification') setNotification(msg.data);
+          setSyncStatus('synced');
+        }catch{}
+      });
+      es.addEventListener('patch', e=>{
+        try{
+          const msg = JSON.parse(e.data);
+          if(msg.data&&msg.data.checked!==undefined){ setChecked(msg.data.checked||{}); lastWritten.current=JSON.stringify(msg.data.checked||{}); }
+          if(msg.data&&msg.data.notification!==undefined) setNotification(msg.data.notification);
+          setSyncStatus('synced');
+        }catch{}
+      });
+      es.onerror = ()=>{ setSyncStatus('error'); };
+    }catch{}
+    return ()=>{ if(es) es.close(); };
+  },[fbUrl]);
+
   // ── WRITE SHARED STATE — debounced 1s ─────────
-  const writeSharedState = useCallback((newChecked, notif=null) => {
+  const writeSharedState = useCallback((newChecked) => {
     if(!fbUrl) return;
     const serialized = JSON.stringify(newChecked);
-    if(serialized === lastWritten.current && !notif) return;
+    if(serialized === lastWritten.current) return;
     if(syncTimer.current) clearTimeout(syncTimer.current);
     setSyncStatus('syncing');
     syncTimer.current = setTimeout(async ()=>{
       try{
-        const state = {checked: newChecked};
-        if(notif) state.notification = notif;
-        else {
-          try{
-            const current = await fbRead(fbUrl);
-            if(current.notification) state.notification = current.notification;
-          }catch{}
-        }
-        await fbWrite(fbUrl, state);
+        await fbPatch(fbUrl, {checked: newChecked});
         lastWritten.current = serialized;
         setSyncStatus('synced');
       }catch{
         setSyncStatus('error');
       }
-    }, 800);
+    }, 500);
   },[fbUrl]);
 
   // ── TOGGLE ITEM (shared) ───────────────────────
@@ -370,13 +429,14 @@ function App(){
       const d=await res.json();
       if(!d.success) throw new Error(d.message||'villa');
 
-      // Update shared state with notification info
+      // Update shared state with notification info (checked list stays untouched)
       const notif={by:userName, at:dt.toISOString(), count};
       setNotification(notif);
       if(fbUrl){
-        try{ await fbWrite(fbUrl,{checked,notification:notif}); setSyncStatus('synced'); }catch{}
+        try{ await fbPatch(fbUrl,{notification:notif}); setSyncStatus('synced'); }catch{}
       }
       setNotifDone(true);
+      setHvatning(HVATNINGAR[Math.floor(Math.random()*HVATNINGAR.length)]);
     }catch(e){showToast(`Sending mistókst: ${e.message||'net villa'}`);}
     finally{setNotifSending(false);}
   };
@@ -423,6 +483,64 @@ function App(){
     const dt=new Date().toLocaleDateString('is-IS');
     setOrderShare({to:supName?(SUP_EMAILS[supName]||ADMIN_EMAIL):ADMIN_EMAIL,subject:supName?`Pöntun ${dt} – ${its.length} vörur`:`Pöntunaryfirlit ${dt} – ${count} vörur`,body:buildOrder(its,supName)});
   };
+
+  // ── CONFETTI / FLUGELDAR ─────────────────────
+  useEffect(()=>{
+    if(!notifDone) return;
+    const canvas = confettiRef.current;
+    if(!canvas) return;
+    const ctx = canvas.getContext('2d');
+    const dpr = window.devicePixelRatio||1;
+    const resize = ()=>{
+      canvas.width = canvas.offsetWidth*dpr;
+      canvas.height = canvas.offsetHeight*dpr;
+      ctx.scale(dpr,dpr);
+    };
+    resize();
+    const W = canvas.offsetWidth, H = canvas.offsetHeight;
+    const colors = ['#E85D04','#22c55e','#f59e0b','#3b82f6','#ec4899','#fff'];
+    const particles = [];
+    // Confetti burst
+    for(let i=0;i<90;i++){
+      particles.push({
+        x: W/2, y: H*0.35,
+        vx: (Math.random()-0.5)*14,
+        vy: (Math.random()-1.4)*13,
+        size: 4+Math.random()*5,
+        color: colors[Math.floor(Math.random()*colors.length)],
+        rot: Math.random()*360,
+        vrot: (Math.random()-0.5)*20,
+        shape: Math.random()>0.5?'rect':'circle',
+        gravity: 0.35+Math.random()*0.15,
+        life: 1
+      });
+    }
+    let raf;
+    const tick = ()=>{
+      ctx.clearRect(0,0,W,H);
+      let alive=false;
+      particles.forEach(p=>{
+        if(p.life<=0) return;
+        alive=true;
+        p.vy += p.gravity;
+        p.x += p.vx;
+        p.y += p.vy;
+        p.rot += p.vrot;
+        p.life -= 0.008;
+        ctx.save();
+        ctx.globalAlpha = Math.max(p.life,0);
+        ctx.translate(p.x,p.y);
+        ctx.rotate(p.rot*Math.PI/180);
+        ctx.fillStyle = p.color;
+        if(p.shape==='rect') ctx.fillRect(-p.size/2,-p.size/2,p.size,p.size*0.6);
+        else { ctx.beginPath(); ctx.arc(0,0,p.size/2,0,Math.PI*2); ctx.fill(); }
+        ctx.restore();
+      });
+      if(alive) raf = requestAnimationFrame(tick);
+    };
+    tick();
+    return ()=>{ if(raf) cancelAnimationFrame(raf); };
+  },[notifDone]);
 
   // ── MISC ──────────────────────────────────────
   const startVoice=()=>{const SR=window.SpeechRecognition||window.webkitSpeechRecognition;if(!SR){showToast('Hljóðþekking er ekki studd');return;}const r=new SR();r.lang='is-IS';r.onstart=()=>setListening(true);r.onend=()=>setListening(false);r.onerror=()=>setListening(false);r.onresult=e=>{setQuery(e.results[0][0].transcript);setAllCats(false);};r.start();};
@@ -845,17 +963,18 @@ function App(){
         </Sheet>
       )}
 
-      {/* NOTIFICATION SUCCESS */}
+      {/* NOTIFICATION SUCCESS — með flugeldum 🎉 */}
       {notifDone&&(
-        <div style={{position:'absolute',inset:0,background:'rgba(0,0,0,.93)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:250,padding:24}}>
-          <div className="pop" style={{background:C.s1,borderRadius:24,padding:'44px 28px',border:`1px solid ${C.bd}`,textAlign:'center',width:'100%',maxWidth:340}}>
-            <div style={{fontSize:60,marginBottom:16}}>✅</div>
-            <div style={{fontFamily:'Oxanium,sans-serif',fontSize:22,fontWeight:700,color:C.grn,marginBottom:10}}>Tilkynning send!</div>
-            <div style={{fontSize:15,color:C.txt,lineHeight:1.6,marginBottom:6}}>
+        <div style={{position:'absolute',inset:0,background:'rgba(0,0,0,.93)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:250,padding:24,overflow:'hidden'}}>
+          <canvas ref={confettiRef} style={{position:'absolute',inset:0,width:'100%',height:'100%',pointerEvents:'none'}}/>
+          <div className="pop" style={{background:C.s1,borderRadius:24,padding:'44px 28px',border:`1px solid ${C.bd}`,textAlign:'center',width:'100%',maxWidth:340,position:'relative',zIndex:2}}>
+            <div style={{fontSize:60,marginBottom:16}}>🎉</div>
+            <div style={{fontFamily:'Oxanium,sans-serif',fontSize:22,fontWeight:700,color:C.grn,marginBottom:14}}>Tilkynning send!</div>
+            <div style={{fontSize:15,color:C.txt,lineHeight:1.6,marginBottom:16}}>
               <span style={{color:C.acc,fontWeight:700}}>{adminName}</span> hefur fengið tilkynningu um að panta vörur
             </div>
-            <div style={{fontSize:12,color:C.mut,marginBottom:28,lineHeight:1.5}}>
-              Hakarnir haldast á listanum.<br/>Þegar {adminName} sendir pöntunina verða þeir hreinsaðir.
+            <div style={{background:'rgba(232,93,4,.08)',border:`1px solid rgba(232,93,4,.2)`,borderRadius:12,padding:'14px 16px',marginBottom:24}}>
+              <div style={{fontSize:14,color:C.acc,fontWeight:600,lineHeight:1.5}}>{hvatning}</div>
             </div>
             <button onClick={()=>setNotifDone(false)} className="tap"
               style={{width:'100%',padding:14,borderRadius:12,border:'none',background:C.acc,color:'#fff',fontSize:15,fontWeight:600,cursor:'pointer',fontFamily:'inherit'}}>
