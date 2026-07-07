@@ -42,7 +42,7 @@ const ITEMS_URL  = `https://raw.githubusercontent.com/${REPO}/main/vorur.json`;
 const CONFIG_URL = `https://raw.githubusercontent.com/${REPO}/main/config.json`;
 const ITEMS_API  = `https://api.github.com/repos/${REPO}/contents/vorur.json`;
 const CONFIG_API = `https://api.github.com/repos/${REPO}/contents/config.json`;
-const ADMIN_EMAIL= 'atlireynir@gmail.com';
+const ADMIN_EMAIL= 'bl.froskur@gmail.com';
 const DEFAULT_PW = 'admin123';
 
 const SUP_EMAILS = {"Jákó":"jako@jako.is","Kemi":"kemi@kemi.is","Tandur":"Tandur@tandur.is","Wurth":"Benni@wurth.is","Bosch":"kemi@kemi.is","Philips":"kemi@kemi.is"};
@@ -101,13 +101,13 @@ const hits = (item,q)=>!q||norm(q).split(/\s+/).filter(Boolean).every(w=>norm(`$
 const grp  = (arr,key)=>arr.reduce((g,x)=>{(g[x[key]]=g[x[key]]||[]).push(x);return g;},{});
 const buildOrder = (items,supName)=>{
   const dt=new Date().toLocaleDateString('is-IS');
-  let b=supName?'Sælir,\n\nGeti þið sent okkur eftirfarandi:\n\n':`Pöntunaryfirlit – ${dt}\n\n`;
+  let b=supName?'Hæ,\n\nVið viljum panta eftirfarandi:\n\n':`Pöntunaryfirlit – ${dt}\n\n`;
   Object.entries(grp(items,'sup')).forEach(([s,its])=>{
     if(!supName) b+=`── ${s} ──\n`;
     its.forEach(i=>{b+=`• ${i.name}`;if(i.sku)b+=` (VNR: ${i.sku})`;b+=` — ${i.qty}\n`;});
     b+='\n';
   });
-  return b+(supName?'\nKveðja,\nVerkstæðið':'\nJLR Verkstæði Hesthálsi 6-8');
+  return b+(supName?'\nKveðja,\nVerkstæðið':'\nSent frá Verkstæðinu');
 };
 const ghCommit = async (apiUrl,token,newData,message)=>{
   const r=await fetch(apiUrl,{headers:{Authorization:`token ${token}`,Accept:'application/vnd.github.v3+json'}});
@@ -241,6 +241,7 @@ function App(){
 
   // Order share
   const [orderShare, setOrderShare] = useState(null);
+  const [orderRefNum,setOrderRefNum]= useState('');
 
   // ── INIT ─────────────────────────────────────
   useEffect(()=>{
@@ -423,9 +424,9 @@ function App(){
     try{
       const dt=new Date();
       const dtStr=dt.toLocaleString('is-IS');
-      const rows=checkedList.map(i=>`<tr><td style="padding:6px 12px;border-bottom:1px solid #eee;font-weight:500">${i.name}</td><td style="padding:6px 12px;border-bottom:1px solid #eee;color:#888;font-size:12px">${i.sku||'—'}</td><td style="padding:6px 12px;border-bottom:1px solid #eee">${i.qty}</td></tr>`).join('');
-      const html=`<div style="font-family:sans-serif;max-width:560px;color:#111"><h2 style="color:#E85D04;margin-bottom:4px">📋 Pöntunarbeiðni</h2><p style="color:#666;margin-bottom:16px"><b>Frá:</b> ${userName} &nbsp;·&nbsp; <b>Dagsetning:</b> ${dtStr}</p><table style="width:100%;border-collapse:collapse;margin-bottom:24px"><thead><tr style="background:#f9f9f9"><th style="padding:8px 12px;text-align:left;font-size:12px">Vara</th><th style="padding:8px 12px;text-align:left;font-size:12px">VNR</th><th style="padding:8px 12px;text-align:left;font-size:12px">Magn</th></tr></thead><tbody>${rows}</tbody></table><p style="color:#888;font-size:13px">Hakarnir halda sér í appinu svo þú getir sent pöntunina þegar hentar.</p></div>`;
-      const res=await fetch('https://api.web3forms.com/submit',{method:'POST',headers:{'Content-Type':'application/json','Accept':'application/json'},body:JSON.stringify({access_key:web3Key,subject:`📋 Pöntunarbeiðni frá ${userName} — ${count} vörur`,from_name:userName,message:html,html:true,botcheck:false})});
+      const lines=checkedList.map(i=>`• ${i.name}${i.sku?` (VNR: ${i.sku})`:''} — ${i.qty}`).join('\n');
+      const plain=`Pöntunarbeiðni frá ${userName}\nDagsetning: ${dtStr}\n\nVörur sem vantar (${count} stk.):\n${lines}\n\n🙂`;
+      const res=await fetch('https://api.web3forms.com/submit',{method:'POST',headers:{'Content-Type':'application/json','Accept':'application/json'},body:JSON.stringify({access_key:web3Key,subject:`Pöntunarbeiðni frá ${userName} — ${count} vörur`,from_name:userName,message:plain,botcheck:false})});
       const d=await res.json();
       if(!d.success) throw new Error(d.message||'villa');
 
@@ -454,20 +455,37 @@ function App(){
 
   // ── PHOTO ─────────────────────────────────────
   const onPhotoChange=e=>{const f=e.target.files[0];if(!f)return;setPhotoFile(f);setPhotoPreview(URL.createObjectURL(f));setPhotoErr(null);setModal('photo');};
-  const compressImg=(file,max=350,q=0.55)=>new Promise((res,rej)=>{
+  // Þjappar mynd niður í Blob (ekki base64) — hentar sem alvöru viðhengi
+  const compressImgBlob=(file,max=900,q=0.7)=>new Promise((res,rej)=>{
     const img=new Image();
-    img.onload=()=>{let{width:w,height:h}=img;if(w>max||h>max){const r=Math.min(max/w,max/h);w=Math.round(w*r);h=Math.round(h*r);}const c=document.createElement('canvas');c.width=w;c.height=h;c.getContext('2d').drawImage(img,0,0,w,h);const b64=c.toDataURL('image/jpeg',q);if(b64.length<100)rej(new Error('compress'));else res(b64);};
+    img.onload=()=>{
+      let{width:w,height:h}=img;
+      if(w>max||h>max){const r=Math.min(max/w,max/h);w=Math.round(w*r);h=Math.round(h*r);}
+      const c=document.createElement('canvas');c.width=w;c.height=h;
+      c.getContext('2d').drawImage(img,0,0,w,h);
+      c.toBlob(blob=>blob?res(blob):rej(new Error('compress')),'image/jpeg',q);
+    };
     img.onerror=rej;img.src=URL.createObjectURL(file);
   });
+
   const sendPhoto=async()=>{
     if(!web3Key){setPhotoErr('Admin þarf að setja upp Web3Forms lykil (⚙️)');return;}
     if(photoSending)return;
     setPhotoSending(true);setPhotoErr(null);
     try{
-      let imgTag='';
-      if(photoFile){try{const b64=await compressImg(photoFile);imgTag=`<br><img src="${b64}" style="max-width:320px;border-radius:8px;margin-top:8px"/>`;}catch{imgTag='<br><i>(Mynd tókst ekki)</i>';}}
-      const html=`<div style="font-family:sans-serif;max-width:500px"><h2 style="color:#E85D04">📦 Tillaga að nýrri vöru</h2><p><b>Sendandi:</b> ${userName}</p><p><b>Dagsetning:</b> ${new Date().toLocaleString('is-IS')}</p><p><b>Lýsing:</b> ${photoDesc||'(engin lýsing)'}</p>${imgTag}</div>`;
-      const res=await fetch('https://api.web3forms.com/submit',{method:'POST',headers:{'Content-Type':'application/json','Accept':'application/json'},body:JSON.stringify({access_key:web3Key,subject:`📦 Tillaga frá ${userName}`,from_name:userName,message:html,html:true,botcheck:false})});
+      const plain=`Tillaga að nýrri vöru\nSendandi: ${userName}\nDagsetning: ${new Date().toLocaleString('is-IS')}\nLýsing: ${photoDesc||'(engin lýsing)'}\n\n📦`;
+      const fd=new FormData();
+      fd.append('access_key', web3Key);
+      fd.append('subject', `Tillaga að vöru frá ${userName}`);
+      fd.append('from_name', userName);
+      fd.append('message', plain);
+      if(photoFile){
+        try{
+          const blob=await compressImgBlob(photoFile);
+          fd.append('attachment', blob, 'tillaga.jpg');
+        }catch{}
+      }
+      const res=await fetch('https://api.web3forms.com/submit',{method:'POST',body:fd});
       const d=await res.json();
       if(!d.success) throw new Error(d.message||'villa');
       showToast('✓ Tillaga send!');resetPhoto();
@@ -481,6 +499,7 @@ function App(){
     const its=supName?checkedList.filter(i=>i.sup===supName):checkedList;
     if(!its.length)return;
     const dt=new Date().toLocaleDateString('is-IS');
+    setOrderRefNum('');
     setOrderShare({to:supName?(SUP_EMAILS[supName]||ADMIN_EMAIL):ADMIN_EMAIL,subject:supName?`Pöntun ${dt} – ${its.length} vörur`:`Pöntunaryfirlit ${dt} – ${count} vörur`,body:buildOrder(its,supName)});
   };
 
@@ -829,7 +848,7 @@ function App(){
               {/* Web3Forms */}
               <div style={{background:'rgba(34,197,94,.06)',border:`1px solid rgba(34,197,94,.15)`,borderRadius:10,padding:'12px 14px',marginBottom:14}}>
                 <div style={{fontSize:11,color:C.grn,fontWeight:600,marginBottom:4}}>WEB3FORMS (tölvupóstlykill)</div>
-                {web3Key?<div style={{fontSize:12,color:C.grn,display:'flex',alignItems:'center',gap:6}}><ICheck s={13} c={C.grn}/> Virkur</div>:<div style={{fontSize:12,color:'#888'}}>web3forms.com → settu inn atlireynir@gmail.com → "Create Access Key"</div>}
+                {web3Key?<div style={{fontSize:12,color:C.grn,display:'flex',alignItems:'center',gap:6}}><ICheck s={13} c={C.grn}/> Virkur</div>:<div style={{fontSize:12,color:'#888'}}>web3forms.com → settu inn bl.froskur@gmail.com → "Create Access Key"</div>}
               </div>
               <Field label="Web3Forms lykill" value={settW3} onChange={setSettW3} placeholder={web3Key?'•••••••••':'xxxxxxxx-xxxx-...'} small/>
 
@@ -951,14 +970,32 @@ function App(){
 
       {/* ORDER SHARE */}
       {orderShare&&(
-        <Sheet onClose={()=>setOrderShare(null)}>
+        <Sheet onClose={()=>{setOrderShare(null);setOrderRefNum('');}}>
           <div style={{fontWeight:700,fontSize:17,marginBottom:3}}>Senda pöntun</div>
           <div style={{fontSize:11,color:C.mut,fontFamily:"'Fira Code',monospace",marginBottom:12}}>{orderShare.to}</div>
           <div style={{background:C.bg,borderRadius:10,padding:'10px 12px',fontSize:11,fontFamily:"'Fira Code',monospace",color:'#888',maxHeight:160,overflowY:'auto',marginBottom:14,whiteSpace:'pre-wrap',border:`1px solid ${C.bd}`,lineHeight:1.6}}>{orderShare.body}</div>
+
+          <div style={{background:'rgba(245,158,11,.08)',border:`1px solid rgba(245,158,11,.2)`,borderRadius:10,padding:'10px 12px',marginBottom:14}}>
+            <div style={{fontSize:11,color:C.amb,fontWeight:600,marginBottom:6}}>💡 Mundu að setja inn beiðnanúmer áður en nýtt tölvupóstur er stofnaður</div>
+            <input value={orderRefNum} onChange={e=>setOrderRefNum(e.target.value)} placeholder="t.d. PO-1042"
+              style={{width:'100%',background:C.s2,border:`1px solid ${C.bd}`,borderRadius:8,padding:'8px 10px',color:C.txt,fontSize:13,fontFamily:"'Fira Code',monospace",outline:'none'}}/>
+          </div>
+
           <div style={{display:'flex',flexDirection:'column',gap:8}}>
-            {navigator.share&&<button onClick={()=>navigator.share({title:orderShare.subject,text:orderShare.body}).catch(()=>{})} className="tap" style={{width:'100%',padding:13,borderRadius:12,border:'none',background:C.acc,color:'#fff',fontSize:14,fontWeight:600,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:8,fontFamily:'inherit'}}><IShare s={16} c="#fff"/> Deila</button>}
+            {navigator.share&&<button onClick={()=>navigator.share({title:orderRefNum?`${orderRefNum} — ${orderShare.subject}`:orderShare.subject,text:orderShare.body}).catch(()=>{})} className="tap" style={{width:'100%',padding:13,borderRadius:12,border:'none',background:C.acc,color:'#fff',fontSize:14,fontWeight:600,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:8,fontFamily:'inherit'}}><IShare s={16} c="#fff"/> Deila</button>}
             <button onClick={()=>navigator.clipboard.writeText(orderShare.body).then(()=>showToast('✓ Afritað')).catch(()=>{})} className="tap" style={{width:'100%',padding:12,borderRadius:12,border:`1px solid ${C.bd}`,background:C.s2,color:C.txt,fontSize:13,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:7,fontFamily:'inherit'}}><ICopy s={14} c={C.txt}/> Afrita</button>
-            <button onClick={()=>window.open(`mailto:${orderShare.to}?subject=${encodeURIComponent(orderShare.subject)}&body=${encodeURIComponent(orderShare.body)}`)} className="tap" style={{width:'100%',padding:12,borderRadius:12,border:`1px solid ${C.bd}`,background:'transparent',color:C.mut,fontSize:13,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:7,fontFamily:'inherit'}}><IMail s={14} c={C.mut}/> Opna í tölvupósti</button>
+            <button onClick={()=>{
+              const subj = orderRefNum ? `${orderRefNum} — ${orderShare.subject}` : orderShare.subject;
+              const mailtoUrl = `mailto:${orderShare.to}?subject=${encodeURIComponent(subj)}&body=${encodeURIComponent(orderShare.body)}`;
+              // window.open often fails silently for mailto: on desktop (popup-blocked).
+              // A real <a> click reliably triggers the OS mail-client picker (Outlook, Mail, etc).
+              const a = document.createElement('a');
+              a.href = mailtoUrl;
+              a.style.display = 'none';
+              document.body.appendChild(a);
+              a.click();
+              document.body.removeChild(a);
+            }} className="tap" style={{width:'100%',padding:12,borderRadius:12,border:`1px solid ${C.bd}`,background:'transparent',color:C.mut,fontSize:13,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:7,fontFamily:'inherit'}}><IMail s={14} c={C.mut}/> Opna í tölvupósti</button>
           </div>
         </Sheet>
       )}
