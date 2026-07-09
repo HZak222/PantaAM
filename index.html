@@ -183,6 +183,7 @@ function App(){
 
   // Config (from GitHub config.json, available to ALL)
   const [web3Key,    setWeb3Key]    = useState('');
+  const [imgbbKey,   setImgbbKey]   = useState('');
   const [adminName,  setAdminName]  = useState('AMJ');
   const [fbUrl,      setFbUrl]      = useState('');
   const [configReady,setConfigReady]= useState(false);
@@ -224,6 +225,7 @@ function App(){
   const [saving,     setSaving]     = useState(false);
   // Settings fields for new keys
   const [settW3,     setSettW3]     = useState('');
+  const [settImgbb,  setSettImgbb]  = useState('');
   const [settFbUrl,  setSettFbUrl]  = useState('');
 
   // Item CRUD
@@ -259,6 +261,7 @@ function App(){
       if(!res.ok) return;
       const d=await res.json();
       if(d.w3key&&!d.w3key.startsWith('SETJA_'))  setWeb3Key(d.w3key);
+      if(d.imgbb_key&&!d.imgbb_key.startsWith('SETJA_')) setImgbbKey(d.imgbb_key);
       if(d.admin_name)                             setAdminName(d.admin_name);
       if(d.firebase_url&&!d.firebase_url.startsWith('SETJA_')) setFbUrl(d.firebase_url);
     }catch{}
@@ -374,11 +377,12 @@ function App(){
     if(!ghToken){showToast('GitHub token vantar');return;}
     setSaving(true);
     try{
-      const full={w3key:newConf.w3||web3Key, admin_name:adminName, admin_email:ADMIN_EMAIL, firebase_url:newConf.fbUrl||fbUrl};
+      const full={w3key:newConf.w3||web3Key, imgbb_key:newConf.imgbb||imgbbKey, admin_name:adminName, admin_email:ADMIN_EMAIL, firebase_url:newConf.fbUrl||fbUrl};
       await ghCommit(CONFIG_API, ghToken, full, 'Uppfært config');
       if(newConf.w3)    setWeb3Key(newConf.w3);
+      if(newConf.imgbb) setImgbbKey(newConf.imgbb);
       if(newConf.fbUrl) setFbUrl(newConf.fbUrl);
-      setSettW3(''); setSettFbUrl('');
+      setSettW3(''); setSettImgbb(''); setSettFbUrl('');
       showToast('✓ Config vistað á GitHub — allir notendur uppfærðir!');
     }catch(e){showToast(`Villa: ${e.message}`);}
     finally{setSaving(false);}
@@ -473,19 +477,24 @@ function App(){
     if(photoSending)return;
     setPhotoSending(true);setPhotoErr(null);
     try{
-      const plain=`Tillaga að nýrri vöru\nSendandi: ${userName}\nDagsetning: ${new Date().toLocaleString('is-IS')}\nLýsing: ${photoDesc||'(engin lýsing)'}\n\n📦`;
-      const fd=new FormData();
-      fd.append('access_key', web3Key);
-      fd.append('subject', `Tillaga að vöru frá ${userName}`);
-      fd.append('from_name', userName);
-      fd.append('message', plain);
+      let imgLine='';
       if(photoFile){
-        try{
-          const blob=await compressImgBlob(photoFile);
-          fd.append('attachment', blob, 'tillaga.jpg');
-        }catch{}
+        if(!imgbbKey){
+          imgLine='\n(Mynd fylgdi ekki — admin þarf að setja upp imgbb lykil í stillingum)';
+        }else{
+          try{
+            const blob=await compressImgBlob(photoFile);
+            const fd=new FormData();
+            fd.append('image', blob, 'tillaga.jpg');
+            const up=await fetch(`https://api.imgbb.com/1/upload?key=${imgbbKey}`,{method:'POST',body:fd});
+            const upData=await up.json();
+            if(upData.success) imgLine=`\nMynd: ${upData.data.url}`;
+            else imgLine='\n(Mynd tókst ekki að hlaða upp)';
+          }catch{ imgLine='\n(Mynd tókst ekki að hlaða upp)'; }
+        }
       }
-      const res=await fetch('https://api.web3forms.com/submit',{method:'POST',body:fd});
+      const plain=`Tillaga að nýrri vöru\nSendandi: ${userName}\nDagsetning: ${new Date().toLocaleString('is-IS')}\nLýsing: ${photoDesc||'(engin lýsing)'}${imgLine}\n\n📦`;
+      const res=await fetch('https://api.web3forms.com/submit',{method:'POST',headers:{'Content-Type':'application/json','Accept':'application/json'},body:JSON.stringify({access_key:web3Key,subject:`Tillaga að vöru frá ${userName}`,from_name:userName,message:plain,botcheck:false})});
       const d=await res.json();
       if(!d.success) throw new Error(d.message||'villa');
       showToast('✓ Tillaga send!');resetPhoto();
@@ -854,13 +863,24 @@ function App(){
 
               <div style={{height:1,background:C.bd,margin:'8px 0 14px'}}/>
 
+              {/* imgbb — for photo suggestions (Web3Forms free tier has no attachments) */}
+              <div style={{background:'rgba(168,85,247,.06)',border:`1px solid rgba(168,85,247,.15)`,borderRadius:10,padding:'12px 14px',marginBottom:14}}>
+                <div style={{fontSize:11,color:'#c084fc',fontWeight:600,marginBottom:4}}>IMGBB (myndir í vöru-tillögum)</div>
+                {imgbbKey
+                  ?<div style={{fontSize:12,color:C.grn,display:'flex',alignItems:'center',gap:6}}><ICheck s={13} c={C.grn}/> Virkur</div>
+                  :<div style={{fontSize:12,color:'#888',lineHeight:1.5}}>Web3Forms ókeypis áætlunin styður ekki viðhengi.<br/>api.imgbb.com → "Get API Key" → afritaðu</div>}
+              </div>
+              <Field label="imgbb lykill" value={settImgbb} onChange={setSettImgbb} placeholder={imgbbKey?'•••••••••':'a1b2c3...'} small/>
+
+              <div style={{height:1,background:C.bd,margin:'8px 0 14px'}}/>
+
               {/* GitHub token */}
               <Field label="GitHub token (til að breyta vörum)" value={ghToken} onChange={v=>{setGhToken(v);localStorage.setItem('vrkst-token',v);}} placeholder="ghp_xxxxxxxxxxxx" mono small
                 hint={ghToken?'✓ Virkur':'github.com → Settings → Developer settings → Tokens (classic) → repo scope'}/>
 
               {/* Save all to config.json */}
-              {(settW3||settFbUrl)&&(
-                <button onClick={()=>saveConfig({w3:settW3,fbUrl:settFbUrl})} disabled={saving||!ghToken} className="tap"
+              {(settW3||settImgbb||settFbUrl)&&(
+                <button onClick={()=>saveConfig({w3:settW3,imgbb:settImgbb,fbUrl:settFbUrl})} disabled={saving||!ghToken} className="tap"
                   style={{width:'100%',padding:12,borderRadius:10,border:'none',background:ghToken?C.acc:'#333',color:'#fff',fontSize:13,fontWeight:600,cursor:ghToken?'pointer':'default',display:'flex',alignItems:'center',justifyContent:'center',gap:7,fontFamily:'inherit',marginTop:4}}>
                   {saving?<IRefresh s={14} c="#fff" cls="spin"/>:<ICheck s={14} c="#fff"/>}
                   {saving?'Vista...':'Vista á GitHub (allir uppfærðir)'}
