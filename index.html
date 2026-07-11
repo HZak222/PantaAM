@@ -63,34 +63,36 @@ const HVATNINGAR = [
 ];
 
 // ══════════════════════════════════════════════
-//  FIREBASE — deilður stöðugrunnur milli tækja
-//  Ókeypis, ótakmarkaðar beiðnir, einn URL
+//  FIREBASE — deilður hakalisti milli tækja
+//  Einfalt: einn slóð (/checked.json), reglulegt uppfletti (polling).
+//  Engin flókin straumtenging — miklu áreiðanlegra.
 // ══════════════════════════════════════════════
-const fbRead = async (fbUrl) => {
-  const res = await fetch(`${fbUrl}/state.json`);
+const fbReadChecked = async (fbUrl) => {
+  const res = await fetch(`${fbUrl}/checked.json?t=${Date.now()}`);
   if(!res.ok) throw new Error(`Firebase villa: ${res.status}`);
   const d = await res.json();
   return d || {};
 };
 
-const fbWrite = async (fbUrl, data) => {
-  const res = await fetch(`${fbUrl}/state.json`, {
+// Uppfærir EINN reit — annaðhvort merkir vöru (true) eða fjarlægir hana (null),
+// snertir aldrei hökin sem önnur tæki eru að breyta á sama tíma.
+const fbPatchChecked = async (fbUrl, id, value) => {
+  const res = await fetch(`${fbUrl}/checked.json`, {
+    method: 'PATCH',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({[id]: value ? true : null})
+  });
+  if(!res.ok) throw new Error(`Firebase patch villa: ${res.status}`);
+};
+
+// Skrifar yfir ALLAN hakalistann — notað þegar admin hreinsar pöntun.
+const fbWriteChecked = async (fbUrl, data) => {
+  const res = await fetch(`${fbUrl}/checked.json`, {
     method: 'PUT',
     headers: {'Content-Type': 'application/json'},
     body: JSON.stringify(data)
   });
   if(!res.ok) throw new Error(`Firebase write villa: ${res.status}`);
-};
-
-// PATCH updates only the given keys, leaving the rest of /state untouched —
-// safe for updating "checked" without ever wiping "notification".
-const fbPatch = async (fbUrl, partial) => {
-  const res = await fetch(`${fbUrl}/state.json`, {
-    method: 'PATCH',
-    headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify(partial)
-  });
-  if(!res.ok) throw new Error(`Firebase patch villa: ${res.status}`);
 };
 
 // ══════════════════════════════════════════════
@@ -192,14 +194,10 @@ function App(){
   const [items,      setItems]      = useState([]);
   const [loading,    setLoading]    = useState(true);
 
-  // Shared state (from Firebase)
-  // checked = {id: true/false, ...}
-  // notification = {by: 'Jón', at: '...', count: 3} | null
+  // Shared hakalisti (from Firebase) — checked = {id: true, ...}
   const [checked,    setChecked]    = useState({});
-  const [notification,setNotification]= useState(null); // last "láta vita"
   const [syncStatus, setSyncStatus] = useState('idle'); // 'idle'|'syncing'|'synced'|'error'
-  const syncTimer = useRef(null);
-  const lastWritten = useRef(null); // avoid re-writing same state
+  const pendingRef = useRef({}); // {id: timestamp} — nýlegar staðbundnar breytingar, verja gegn "flökti" úr polli
 
   // UI
   const [view,       setView]       = useState('list');
@@ -249,7 +247,6 @@ function App(){
   useEffect(()=>{
     const n=localStorage.getItem('vrkst-name'); if(n){setUserName(n);setNameSet(true);}
     const tk=localStorage.getItem('vrkst-token'); if(tk) setGhToken(tk);
-    // Fetch config + items in parallel
     fetchConfig();
     fetchItems();
   },[]);
@@ -268,94 +265,54 @@ function App(){
     finally{setConfigReady(true);}
   };
 
-  // ── FETCH SHARED STATE (Firebase) ──────────────
-  // Called once config is ready and fbUrl is set
-  useEffect(()=>{
-    if(configReady&&fbUrl) fetchSharedState();
-  },[configReady,fbUrl]);
-
+  // ── HAKALISTI — reglulegt uppfletti (polling) ──────────────
+  // Einfaldasta og áreiðanlegasta leiðin til að halda öllum tækjum samstilltum:
+  // spyrja Firebase á 3ja sek. fresti. Nýlegar staðbundnar breytingar (síðustu
+  // 4 sek.) fá forgang svo eigin hök "flökti" ekki til baka meðan skrifið er
+  // enn á leiðinni til netþjónsins.
   const fetchSharedState = async () => {
     if(!fbUrl) return;
     setSyncStatus('syncing');
     try{
-      const state = await fbRead(fbUrl);
-      if(state.checked) setChecked(state.checked);
-      if(state.notification!==undefined) setNotification(state.notification);
-      lastWritten.current = JSON.stringify(state.checked||{});
+      const remote = await fbReadChecked(fbUrl);
+      setChecked(prev=>{
+        const merged = {...remote};
+        const now = Date.now();
+        Object.keys(pendingRef.current).forEach(id=>{
+          if(now - pendingRef.current[id] < 4000){
+            if(prev[id]) merged[id]=true; else delete merged[id];
+          } else {
+            delete pendingRef.current[id];
+          }
+        });
+        return merged;
+      });
       setSyncStatus('synced');
-    }catch(e){
+    }catch{
       setSyncStatus('error');
     }
   };
 
-  // ── LIVE SYNC (Firebase SSE) ────────────────────
-  // Streams changes from ANY device the instant they happen —
-  // this is what makes checkboxes sync between phones in real time.
   useEffect(()=>{
-    if(!fbUrl) return;
-    let es;
-    try{
-      es = new EventSource(`${fbUrl}/state.json`);
-      const applyData = (data)=>{
-        if(!data||typeof data!=='object') return;
-        if(data.checked!==undefined){
-          const nc = data.checked||{};
-          setChecked(nc);
-          lastWritten.current = JSON.stringify(nc);
-        }
-        if(data.notification!==undefined) setNotification(data.notification);
-      };
-      es.addEventListener('put', e=>{
-        try{
-          const msg = JSON.parse(e.data);
-          // Root update — msg.data is the full state object
-          if(msg.path==='/') applyData(msg.data);
-          else if(msg.path==='/checked'){ setChecked(msg.data||{}); lastWritten.current=JSON.stringify(msg.data||{}); }
-          else if(msg.path==='/notification') setNotification(msg.data);
-          setSyncStatus('synced');
-        }catch{}
-      });
-      es.addEventListener('patch', e=>{
-        try{
-          const msg = JSON.parse(e.data);
-          if(msg.data&&msg.data.checked!==undefined){ setChecked(msg.data.checked||{}); lastWritten.current=JSON.stringify(msg.data.checked||{}); }
-          if(msg.data&&msg.data.notification!==undefined) setNotification(msg.data.notification);
-          setSyncStatus('synced');
-        }catch{}
-      });
-      es.onerror = ()=>{ setSyncStatus('error'); };
-    }catch{}
-    return ()=>{ if(es) es.close(); };
-  },[fbUrl]);
-
-  // ── WRITE SHARED STATE — debounced 1s ─────────
-  const writeSharedState = useCallback((newChecked) => {
-    if(!fbUrl) return;
-    const serialized = JSON.stringify(newChecked);
-    if(serialized === lastWritten.current) return;
-    if(syncTimer.current) clearTimeout(syncTimer.current);
-    setSyncStatus('syncing');
-    syncTimer.current = setTimeout(async ()=>{
-      try{
-        await fbPatch(fbUrl, {checked: newChecked});
-        lastWritten.current = serialized;
-        setSyncStatus('synced');
-      }catch{
-        setSyncStatus('error');
-      }
-    }, 500);
-  },[fbUrl]);
+    if(!(configReady&&fbUrl)) return;
+    fetchSharedState(); // strax við tengingu
+    const iv = setInterval(fetchSharedState, 3000);
+    return ()=>clearInterval(iv);
+  },[configReady,fbUrl]);
 
   // ── TOGGLE ITEM (shared) ───────────────────────
+  // Uppfærir skjáinn samstundis (bjartsýn uppfærsla) og sendir bara
+  // breytta reitinn til Firebase — snertir aldrei hök annarra notenda.
   const toggle = useCallback(id => {
     setChecked(prev => {
-      const next = {...prev, [id]: !prev[id]};
-      // Remove false values to keep state clean
-      if(!next[id]) delete next[id];
-      writeSharedState(next);
+      const nextVal = !prev[id];
+      const next = {...prev};
+      if(nextVal) next[id]=true; else delete next[id];
+      pendingRef.current[id] = Date.now();
+      if(fbUrl) fbPatchChecked(fbUrl, id, nextVal).then(()=>setSyncStatus('synced')).catch(()=>setSyncStatus('error'));
       return next;
     });
-  },[writeSharedState]);
+  },[fbUrl]);
 
   // ── FETCH ITEMS ───────────────────────────────
   const fetchItems=async()=>{
@@ -413,33 +370,28 @@ function App(){
     setSaving(true);
     try{
       await commitItems(items.filter(i=>i.id!==id),'Eytti vöru');
-      const next={...checked}; delete next[id]; setChecked(next);
-      writeSharedState(next);
+      setChecked(prev=>{const next={...prev}; delete next[id]; return next;});
+      if(fbUrl){ try{ await fbPatchChecked(fbUrl,id,false); }catch{} }
       setDelId(null); showToast('✓ Vöru eytt!');
     }catch(e){showToast(`Villa: ${e.message}`);}
     finally{setSaving(false);}
   };
 
   // ── SEND NOTIFICATION ─────────────────────────
+  // Einfalt: bara tölvupóstur til admin um að vörur vanti.
+  // Hakalistinn sjálfur er þegar samstilltur gegnum Firebase — engin
+  // sérstök "notification" staða þarf að vistast neins staðar.
   const sendNotification=async()=>{
     if(!web3Key){showToast('Admin þarf að setja upp Web3Forms lykil (⚙️)');return;}
     if(!count) return;
     setNotifSending(true);
     try{
-      const dt=new Date();
-      const dtStr=dt.toLocaleString('is-IS');
+      const dtStr=new Date().toLocaleString('is-IS');
       const lines=checkedList.map(i=>`• ${i.name}${i.sku?` (VNR: ${i.sku})`:''} — ${i.qty}`).join('\n');
-      const plain=`Pöntunarbeiðni frá ${userName}\nDagsetning: ${dtStr}\n\nVörur sem vantar (${count} stk.):\n${lines}\n\n🙂`;
-      const res=await fetch('https://api.web3forms.com/submit',{method:'POST',headers:{'Content-Type':'application/json','Accept':'application/json'},body:JSON.stringify({access_key:web3Key,subject:`Pöntunarbeiðni frá ${userName} — ${count} vörur`,from_name:userName,message:plain,botcheck:false})});
+      const plain=`Frá: ${userName}\nDagsetning: ${dtStr}\n\nVörur sem vantar (${count} stk.):\n${lines}\n\n🙂`;
+      const res=await fetch('https://api.web3forms.com/submit',{method:'POST',headers:{'Content-Type':'application/json','Accept':'application/json'},body:JSON.stringify({access_key:web3Key,subject:'það vantar vörur',from_name:userName,message:plain,botcheck:false})});
       const d=await res.json();
       if(!d.success) throw new Error(d.message||'villa');
-
-      // Update shared state with notification info (checked list stays untouched)
-      const notif={by:userName, at:dt.toISOString(), count};
-      setNotification(notif);
-      if(fbUrl){
-        try{ await fbPatch(fbUrl,{notification:notif}); setSyncStatus('synced'); }catch{}
-      }
       setNotifDone(true);
       setHvatning(HVATNINGAR[Math.floor(Math.random()*HVATNINGAR.length)]);
     }catch(e){showToast(`Sending mistókst: ${e.message||'net villa'}`);}
@@ -448,12 +400,8 @@ function App(){
 
   // ── CLEAR ORDER (admin) ───────────────────────
   const clearOrder=async()=>{
-    const emptyChecked={};
-    setChecked(emptyChecked);
-    setNotification(null);
-    if(fbUrl){
-      try{await fbWrite(fbUrl,{checked:{},notification:null});setSyncStatus('synced');}catch{}
-    }
+    setChecked({});
+    if(fbUrl){ try{ await fbWriteChecked(fbUrl,{}); }catch{} }
     showToast('✓ Pöntun hreinsuð');
   };
 
@@ -597,10 +545,6 @@ function App(){
     return <div title={syncStatus==='synced'?'Samstillt':syncStatus==='error'?'Samstillingarerror':'Samstilli...'} className={cls} style={{width:6,height:6,borderRadius:'50%',background:color,flexShrink:0}}/>;
   };
 
-  // ── Notification banner ───────────────────────
-  const hasNotif = notification && notification.by && count > 0;
-  const notifTime = notification?.at ? new Date(notification.at).toLocaleString('is-IS',{hour:'2-digit',minute:'2-digit',day:'2-digit',month:'2-digit'}) : '';
-
   // ══════════════════════════════════════
   //  NAME SETUP
   // ══════════════════════════════════════
@@ -663,17 +607,6 @@ function App(){
           </button>
         </div>
       </div>
-
-      {/* NOTIFICATION BANNER — "Jón bað um pöntun · 14:30" */}
-      {hasNotif&&(
-        <div style={{background:'rgba(245,158,11,.08)',borderBottom:`1px solid rgba(245,158,11,.2)`,padding:'7px 16px',display:'flex',alignItems:'center',gap:8,flexShrink:0}}>
-          <IBell s={13} c={C.amb} cls="blink"/>
-          <span style={{fontSize:12,color:C.amb,fontWeight:600,flex:1}}>
-            {notification.by} bað um pöntun · {notifTime} · {notification.count} vörur
-          </span>
-          {isAdmin&&<button onClick={clearOrder} style={{background:'none',border:'none',color:C.mut,cursor:'pointer',fontSize:11,padding:'2px 6px',fontFamily:'inherit'}}>hreinsa eftir pöntun</button>}
-        </div>
-      )}
 
       {/* FILTERS */}
       {view==='list'&&(
