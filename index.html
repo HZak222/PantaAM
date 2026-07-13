@@ -197,6 +197,7 @@ function App(){
   // Shared hakalisti (from Firebase) — checked = {id: true, ...}
   const [checked,    setChecked]    = useState({});
   const [syncStatus, setSyncStatus] = useState('idle'); // 'idle'|'syncing'|'synced'|'error'
+  const [syncErrorCount, setSyncErrorCount] = useState(0);
   const pendingRef = useRef({}); // {id: timestamp} — nýlegar staðbundnar breytingar, verja gegn "flökti" úr polli
 
   // UI
@@ -288,8 +289,10 @@ function App(){
         return merged;
       });
       setSyncStatus('synced');
+      setSyncErrorCount(0);
     }catch{
       setSyncStatus('error');
+      setSyncErrorCount(n=>n+1);
     }
   };
 
@@ -607,6 +610,16 @@ function App(){
           </button>
         </div>
       </div>
+
+      {/* SYNC ERROR WARNING — birtist ef Firebase svarar ekki (t.d. útrunnar test-mode reglur) */}
+      {syncErrorCount>=2&&fbUrl&&(
+        <div style={{background:'rgba(239,68,68,.08)',borderBottom:`1px solid rgba(239,68,68,.25)`,padding:'8px 16px',display:'flex',alignItems:'center',gap:8,flexShrink:0}}>
+          <IX s={13} c={C.red}/>
+          <span style={{fontSize:12,color:C.red,fontWeight:600,flex:1,lineHeight:1.4}}>
+            Samstilling milli tækja virkar ekki núna{isAdmin?' — athugaðu Firebase Rules (líklega útrunnin test-mode)':''}
+          </span>
+        </div>
+      )}
 
       {/* FILTERS */}
       {view==='list'&&(
