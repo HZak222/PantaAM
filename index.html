@@ -101,6 +101,13 @@ const fbWriteChecked = async (fbUrl, data) => {
 const norm = s=>(s||'').toLowerCase().replace(/[áä]/g,'a').replace(/[éê]/g,'e').replace(/[íî]/g,'i').replace(/[óö]/g,'o').replace(/[úü]/g,'u').replace(/ý/g,'y').replace(/ð/g,'d').replace(/þ/g,'th').replace(/æ/g,'ae');
 const hits = (item,q)=>!q||norm(q).split(/\s+/).filter(Boolean).every(w=>norm(`${item.name} ${item.sku} ${item.sup}`).includes(w));
 const grp  = (arr,key)=>arr.reduce((g,x)=>{(g[x[key]]=g[x[key]]||[]).push(x);return g;},{});
+// Réttar Firebase RTDB slóðir enda á .firebaseio.com eða .firebasedatabase.app —
+// algeng mistök eru að líma inn console.firebase.google.com slóðina í staðinn.
+const isValidFbUrl = (url) => {
+  if(!url) return false;
+  if(url.includes('console.firebase.google.com')) return false;
+  return /^https:\/\/[a-z0-9-]+\.(firebaseio\.com|[a-z0-9.-]+\.firebasedatabase\.app)\/?$/i.test(url.trim());
+};
 const buildOrder = (items,supName)=>{
   const dt=new Date().toLocaleDateString('is-IS');
   let b=supName?'Hæ,\n\nVið viljum panta eftirfarandi:\n\n':`Pöntunaryfirlit – ${dt}\n\n`;
@@ -782,21 +789,27 @@ function App(){
               <div style={{height:1,background:C.bd,margin:'8px 0 14px'}}/>
 
               {/* Firebase setup */}
-              <div style={{background:'rgba(255,170,0,.06)',border:'1px solid rgba(255,170,0,.15)',borderRadius:10,padding:'12px 14px',marginBottom:14}}>
+              <div style={{background: fbUrl&&!isValidFbUrl(fbUrl)?'rgba(239,68,68,.08)':'rgba(255,170,0,.06)', border: `1px solid ${fbUrl&&!isValidFbUrl(fbUrl)?'rgba(239,68,68,.3)':'rgba(255,170,0,.15)'}`, borderRadius:10, padding:'12px 14px', marginBottom:14}}>
                 <div style={{fontSize:11,color:'#fbbf24',fontWeight:600,marginBottom:8}}>🔥 FIREBASE — DEILING MILLI TÆKJA</div>
-                {fbUrl
+                {fbUrl&&!isValidFbUrl(fbUrl)
+                  ?<div style={{fontSize:12,color:C.red,lineHeight:1.6}}>
+                    ⚠️ Þessi slóð er ekki rétt — hún lítur út eins og Firebase <b>Console</b>-slóðin (þar sem þú stjórnar verkefninu), ekki gagnagrunns-slóðin sjálf sem appið þarf.<br/><br/>
+                    Farðu í Console → <b>Realtime Database → flipinn "Data"</b> — rétta slóðin birtist efst, og hún endar á <code style={{background:'#222',padding:'1px 4px',borderRadius:3}}>.firebaseio.com</code> eða <code style={{background:'#222',padding:'1px 4px',borderRadius:3}}>.firebasedatabase.app</code>
+                  </div>
+                  :fbUrl
                   ?<div style={{fontSize:12,color:C.grn,display:'flex',alignItems:'center',gap:6}}><ICheck s={13} c={C.grn}/> Virkur — hakarnir deila sér á milli allra tækja</div>
                   :<div style={{fontSize:12,color:'#888',lineHeight:1.7}}>
                     Ókeypis, ótakmarkaðar beiðnir. Bara þörf á einum URL.<br/>
                     1. <b style={{color:'#fbbf24'}}>console.firebase.google.com</b> → Add project<br/>
                     2. Build → Realtime Database → Create database<br/>
                     3. Veldu "Start in test mode" → Enable<br/>
-                    4. Afritaðu Database URL (t.d. https://xxx-default-rtdb.firebaseio.com)<br/>
+                    4. Á "Data" flipanum — afritaðu slóðina EFST á síðunni (t.d. https://xxx-default-rtdb.firebaseio.com) — EKKI slóðina úr vafranum þínum<br/>
                     5. Límdu hér:
                   </div>
                 }
               </div>
               <Field label="Firebase Database URL" value={settFbUrl} onChange={setSettFbUrl} placeholder={fbUrl||'https://your-project-default-rtdb.firebaseio.com'} mono small/>
+              {settFbUrl&&!isValidFbUrl(settFbUrl)&&<div style={{fontSize:11,color:C.red,marginTop:-8,marginBottom:8}}>⚠️ Þetta lítur ekki út eins og rétt Firebase gagnagrunns-slóð</div>}
 
               <div style={{height:1,background:C.bd,margin:'8px 0 14px'}}/>
 
@@ -826,7 +839,13 @@ function App(){
 
               {/* Save all to config.json */}
               {(settW3||settImgbb||settFbUrl)&&(
-                <button onClick={()=>saveConfig({w3:settW3,imgbb:settImgbb,fbUrl:settFbUrl})} disabled={saving||!ghToken} className="tap"
+                <button onClick={()=>{
+                  if(settFbUrl&&!isValidFbUrl(settFbUrl)){
+                    showToast('⚠️ Firebase slóðin er ekki rétt — sjá leiðbeiningar að ofan');
+                    return;
+                  }
+                  saveConfig({w3:settW3,imgbb:settImgbb,fbUrl:settFbUrl});
+                }} disabled={saving||!ghToken} className="tap"
                   style={{width:'100%',padding:12,borderRadius:10,border:'none',background:ghToken?C.acc:'#333',color:'#fff',fontSize:13,fontWeight:600,cursor:ghToken?'pointer':'default',display:'flex',alignItems:'center',justifyContent:'center',gap:7,fontFamily:'inherit',marginTop:4}}>
                   {saving?<IRefresh s={14} c="#fff" cls="spin"/>:<ICheck s={14} c="#fff"/>}
                   {saving?'Vista...':'Vista á GitHub (allir uppfærðir)'}
