@@ -646,5 +646,13 @@
     "sku": "1987302825",
     "name": "12V 10W – Pulsa",
     "qty": "1 pk."
+  },
+  {
+    "id": "u1784294400801",
+    "name": "Bleikur kústur",
+    "sku": "12345",
+    "sup": "Tandur",
+    "cat": "Efnavörur",
+    "qty": "Kústar fyrir larfa"
   }
 ]
