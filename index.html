@@ -95,6 +95,25 @@ const fbWriteChecked = async (fbUrl, data) => {
   if(!res.ok) throw new Error(`Firebase write villa: ${res.status}`);
 };
 
+// ── Pöntunarsaga — vistuð handvirkt með "Vista í sögu" hnappi ──
+const fbReadHistory = async (fbUrl) => {
+  const res = await fetch(`${fbUrl}/history.json?t=${Date.now()}`);
+  if(!res.ok) throw new Error(`Firebase villa: ${res.status}`);
+  const d = await res.json();
+  return d || {};
+};
+// Hver færsla fær eigin lykil (tímastimpill) svo hún skrifi aldrei yfir aðrar
+// færslur, jafnvel þótt tvö tæki vistuðu á sama augnabliki.
+const fbSaveHistoryEntry = async (fbUrl, entry) => {
+  const key = `h${Date.now()}`;
+  const res = await fetch(`${fbUrl}/history/${key}.json`, {
+    method: 'PUT',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(entry)
+  });
+  if(!res.ok) throw new Error(`Firebase write villa: ${res.status}`);
+};
+
 // ══════════════════════════════════════════════
 //  GITHUB HELPER
 // ══════════════════════════════════════════════
@@ -154,6 +173,8 @@ const IBell   =({s,c,cls})=><Ic s={s} c={c} cls={cls} ch={<><path d="M18 8A6 6 0
 const IShield =({s,c})=><Ic s={s} c={c} ch={<><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></>}/>;
 const ICopy   =({s,c})=><Ic s={s} c={c} ch={<><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></>}/>;
 const IWifi   =({s,c})=><Ic s={s} c={c} ch={<><path d="M1.42 9a16 16 0 0 1 21.16 0"/><path d="M5 12.55a11 11 0 0 1 14.08 0"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><line x1="12" y1="20" x2="12.01" y2="20"/></>}/>;
+const IClock  =({s,c})=><Ic s={s} c={c} ch={<><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></>}/>;
+const IDownload=({s,c})=><Ic s={s} c={c} ch={<><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></>}/>;
 
 const C={bg:'#0b0b0b',s1:'#141414',s2:'#1c1c1c',bd:'#272727',acc:'#E85D04',txt:'#efefef',mut:'#666',grn:'#22c55e',red:'#ef4444',amb:'#f59e0b'};
 
@@ -255,6 +276,10 @@ function App(){
   // Order share
   const [orderShare, setOrderShare] = useState(null);
   const [orderRefNum,setOrderRefNum]= useState('');
+  const [historyEntries, setHistoryEntries] = useState([]);
+  const [historyLoaded,  setHistoryLoaded]  = useState(false);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [savingHistory,  setSavingHistory]  = useState(false);
 
   // ── INIT ─────────────────────────────────────
   useEffect(()=>{
@@ -459,6 +484,58 @@ function App(){
     showToast('✓ Pöntun hreinsuð');
   };
 
+  // ── PÖNTUNARSAGA ───────────────────────────────
+  const fetchHistory = async () => {
+    if(!fbUrl) return;
+    setHistoryLoading(true);
+    try{
+      const raw = await fbReadHistory(fbUrl);
+      const arr = Object.values(raw).sort((a,b)=> new Date(b.date) - new Date(a.date));
+      setHistoryEntries(arr);
+      setHistoryLoaded(true);
+    }catch{ showToast('Gat ekki sótt pöntunarsögu'); }
+    finally{ setHistoryLoading(false); }
+  };
+
+  // Vistar núverandi "Senda yfirlit" glugga sem eina færslu í söguna
+  const saveToHistory = async () => {
+    if(!fbUrl){ showToast('Firebase er ekki stillt (⚙️)'); return; }
+    if(!orderShare) return;
+    setSavingHistory(true);
+    try{
+      const entry = {
+        date: new Date().toISOString(),
+        by: userName,
+        supplier: orderShare.supplierName || 'Allir birgjar',
+        refNum: orderRefNum || '',
+        items: (orderShare.items||[]).map(i=>({name:i.name, sku:i.sku||'', qty:i.qty}))
+      };
+      await fbSaveHistoryEntry(fbUrl, entry);
+      setHistoryEntries(prev=>[entry, ...prev]);
+      showToast('✓ Vistað í pöntunarsögu!');
+    }catch(e){ showToast(`Villa: ${e.message}`); }
+    finally{ setSavingHistory(false); }
+  };
+
+  // Sækir alla söguna sem .csv skrá (opnast beint í Excel/Sheets)
+  const exportHistoryCSV = () => {
+    if(!historyEntries.length){ showToast('Engin saga til að sækja'); return; }
+    const esc = v => `"${String(v??'').replace(/"/g,'""')}"`;
+    let csv = 'Dagsetning,Sent af,Birgir,Beiðnanúmer,Vara,VNR,Magn\n';
+    historyEntries.forEach(e=>{
+      const dt = new Date(e.date).toLocaleString('is-IS');
+      (e.items||[]).forEach(it=>{
+        csv += [esc(dt), esc(e.by), esc(e.supplier), esc(e.refNum), esc(it.name), esc(it.sku), esc(it.qty)].join(',')+'\n';
+      });
+    });
+    const blob = new Blob(['\uFEFF'+csv], {type:'text/csv;charset=utf-8;'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = `pontunarsaga_${new Date().toISOString().slice(0,10)}.csv`;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
   // ── PHOTO ─────────────────────────────────────
   const onPhotoChange=e=>{const f=e.target.files[0];if(!f)return;setPhotoFile(f);setPhotoPreview(URL.createObjectURL(f));setPhotoErr(null);setModal('photo');};
   // Þjappar mynd niður í Blob (ekki base64) — hentar sem alvöru viðhengi
@@ -511,8 +588,9 @@ function App(){
     if(!its.length)return;
     const dt=new Date().toLocaleDateString('is-IS');
     setOrderRefNum('');
-    setOrderShare({to:supName?(SUPS_MAP[supName]||ADMIN_EMAIL):ADMIN_EMAIL,subject:supName?`Pöntun ${dt} – ${its.length} vörur`:`Pöntunaryfirlit ${dt} – ${count} vörur`,body:buildOrder(its,supName)});
+    setOrderShare({to:supName?(SUPS_MAP[supName]||ADMIN_EMAIL):ADMIN_EMAIL,subject:supName?`Pöntun ${dt} – ${its.length} vörur`:`Pöntunaryfirlit ${dt} – ${count} vörur`,body:buildOrder(its,supName),supplierName:supName||'Allir birgjar',items:its});
   };
+
 
   // ── CONFETTI / FLUGELDAR ─────────────────────
   useEffect(()=>{
@@ -786,6 +864,54 @@ function App(){
             }
           </>
         )}
+
+        {/* ═══ PÖNTUNARSAGA (admin only) ═══ */}
+        {view==='history'&&isAdmin&&(
+          <>
+            <div style={{padding:'14px 16px 4px',display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+              <div style={{fontSize:13,color:C.mut}}>{historyEntries.length} færslur vistaðar</div>
+              <button onClick={exportHistoryCSV} disabled={!historyEntries.length} className="tap"
+                style={{background:'rgba(232,93,4,.1)',border:'1px solid rgba(232,93,4,.25)',color:C.acc,padding:'6px 12px',borderRadius:8,fontSize:12,fontWeight:600,cursor:'pointer',display:'flex',alignItems:'center',gap:6,fontFamily:'inherit',opacity:historyEntries.length?1:.4}}>
+                <IDownload s={13} c={C.acc}/> Sækja CSV
+              </button>
+            </div>
+
+            {historyLoading&&(
+              <div style={{textAlign:'center',padding:'50px 20px',color:C.mut}}>
+                <IRefresh s={28} c={C.mut} cls="spin" st={{opacity:.3}}/>
+                <div style={{fontSize:13,marginTop:10}}>Sæki sögu...</div>
+              </div>
+            )}
+
+            {!historyLoading&&historyEntries.length===0&&(
+              <div style={{textAlign:'center',padding:'70px 20px',color:C.mut}}>
+                <IClock s={42} c={C.mut} st={{opacity:.15}}/>
+                <div style={{fontSize:15,marginTop:14}}>Engin saga ennþá</div>
+                <div style={{fontSize:12,marginTop:6}}>Smelltu á "Vista í sögu" þegar þú sendir pöntun</div>
+              </div>
+            )}
+
+            {!historyLoading&&historyEntries.map((e,idx)=>(
+              <div key={idx} style={{margin:'8px 16px',background:C.s1,borderRadius:12,border:`1px solid ${C.bd}`,overflow:'hidden'}}>
+                <div style={{padding:'10px 14px',borderBottom:`1px solid ${C.bd}`,display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                  <div>
+                    <div style={{fontSize:13,fontWeight:600}}>{e.supplier}{e.refNum?` · ${e.refNum}`:''}</div>
+                    <div style={{fontSize:11,color:C.mut,marginTop:1}}>{new Date(e.date).toLocaleString('is-IS')} · {e.by}</div>
+                  </div>
+                  <div style={{fontSize:11,color:C.acc,fontWeight:600}}>{(e.items||[]).length} vörur</div>
+                </div>
+                <div style={{padding:'6px 14px'}}>
+                  {(e.items||[]).map((it,i)=>(
+                    <div key={i} style={{fontSize:12,color:C.txt,padding:'4px 0',borderBottom:i<e.items.length-1?`1px solid ${C.bd}`:'none'}}>
+                      {it.name} <span style={{color:C.mut}}>— {it.qty}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+            <div style={{height:80}}/>
+          </>
+        )}
       </div>
 
       {/* BOTTOM NAV */}
@@ -796,6 +922,11 @@ function App(){
         {isAdmin&&(
           <button onClick={()=>setView('order')} className="tap" style={{flex:1,padding:'11px 8px',border:'none',background:'transparent',color:view==='order'?C.acc:C.mut,borderTop:view==='order'?`2px solid ${C.acc}`:'2px solid transparent',display:'flex',flexDirection:'column',alignItems:'center',gap:3,cursor:'pointer',marginTop:-1,fontFamily:'inherit'}}>
             <ICart s={18} c={view==='order'?C.acc:C.mut}/><span style={{fontSize:11,fontWeight:view==='order'?600:400}}>Pöntun{count>0?` (${count})`:''}</span>
+          </button>
+        )}
+        {isAdmin&&(
+          <button onClick={()=>{setView('history'); if(!historyLoaded) fetchHistory();}} className="tap" style={{flex:1,padding:'11px 8px',border:'none',background:'transparent',color:view==='history'?C.acc:C.mut,borderTop:view==='history'?`2px solid ${C.acc}`:'2px solid transparent',display:'flex',flexDirection:'column',alignItems:'center',gap:3,cursor:'pointer',marginTop:-1,fontFamily:'inherit'}}>
+            <IClock s={18} c={view==='history'?C.acc:C.mut}/><span style={{fontSize:11,fontWeight:view==='history'?600:400}}>Saga</span>
           </button>
         )}
       </div>
@@ -1051,8 +1182,12 @@ function App(){
             const subj = orderRefNum ? `${orderRefNum} — ${orderShare.subject}` : orderShare.subject;
             const full = `Til: ${orderShare.to}\nEfni: ${subj}\n\n${orderShare.body}`;
             navigator.clipboard.writeText(full).then(()=>showToast('✓ Afritað — límdu inn í nýjan tölvupóst')).catch(()=>showToast('Gat ekki afritað'));
-          }} className="tap" style={{width:'100%',padding:14,borderRadius:12,border:'none',background:C.acc,color:'#fff',fontSize:14,fontWeight:600,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:8,fontFamily:'inherit'}}>
+          }} className="tap" style={{width:'100%',padding:14,borderRadius:12,border:'none',background:C.acc,color:'#fff',fontSize:14,fontWeight:600,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:8,fontFamily:'inherit',marginBottom:8}}>
             <ICopy s={16} c="#fff"/> Afrita fyrir tölvupóst
+          </button>
+          <button onClick={saveToHistory} disabled={savingHistory} className="tap" style={{width:'100%',padding:12,borderRadius:12,border:`1px solid ${C.bd}`,background:C.s2,color:C.txt,fontSize:13,fontWeight:600,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:7,fontFamily:'inherit',opacity:savingHistory?.6:1}}>
+            {savingHistory?<IRefresh s={14} c={C.txt} cls="spin"/>:<IBox s={14} c={C.txt}/>}
+            {savingHistory?'Vista...':'Vista í sögu'}
           </button>
         </Sheet>
       )}
