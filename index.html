@@ -233,6 +233,11 @@ function App(){
   const [settW3,     setSettW3]     = useState('');
   const [settImgbb,  setSettImgbb]  = useState('');
   const [settFbUrl,  setSettFbUrl]  = useState('');
+  const [extraCats,  setExtraCats]  = useState([]);
+  const [extraSups,  setExtraSups]  = useState({});
+  const [newCatName, setNewCatName] = useState('');
+  const [newSupName, setNewSupName] = useState('');
+  const [newSupEmail,setNewSupEmail]= useState('');
 
   // Item CRUD
   const [newItem,    setNewItem]    = useState({name:'',sku:'',sup:'Kemi',cat:'Efnavörur',qty:''});
@@ -269,6 +274,8 @@ function App(){
       if(d.imgbb_key&&!d.imgbb_key.startsWith('SETJA_')) setImgbbKey(d.imgbb_key);
       if(d.admin_name)                             setAdminName(d.admin_name);
       if(d.firebase_url&&!d.firebase_url.startsWith('SETJA_')) setFbUrl(d.firebase_url);
+      if(Array.isArray(d.extra_categories)) setExtraCats(d.extra_categories);
+      if(d.extra_suppliers&&typeof d.extra_suppliers==='object') setExtraSups(d.extra_suppliers);
     }catch{}
     finally{setConfigReady(true);}
   };
@@ -340,17 +347,54 @@ function App(){
   };
 
   // ── SAVE CONFIG ───────────────────────────────
+  const buildFullConfig = (overrides={}) => ({
+    w3key: web3Key, imgbb_key: imgbbKey, admin_name: adminName, admin_email: ADMIN_EMAIL,
+    firebase_url: fbUrl, extra_categories: extraCats, extra_suppliers: extraSups, ...overrides
+  });
+
   const saveConfig = async (newConf) => {
     if(!ghToken){showToast('GitHub token vantar');return;}
     setSaving(true);
     try{
-      const full={w3key:newConf.w3||web3Key, imgbb_key:newConf.imgbb||imgbbKey, admin_name:adminName, admin_email:ADMIN_EMAIL, firebase_url:newConf.fbUrl||fbUrl};
+      const full=buildFullConfig({w3key:newConf.w3||web3Key, imgbb_key:newConf.imgbb||imgbbKey, firebase_url:newConf.fbUrl||fbUrl});
       await ghCommit(CONFIG_API, ghToken, full, 'Uppfært config');
       if(newConf.w3)    setWeb3Key(newConf.w3);
       if(newConf.imgbb) setImgbbKey(newConf.imgbb);
       if(newConf.fbUrl) setFbUrl(newConf.fbUrl);
       setSettW3(''); setSettImgbb(''); setSettFbUrl('');
       showToast('✓ Config vistað á GitHub — allir notendur uppfærðir!');
+    }catch(e){showToast(`Villa: ${e.message}`);}
+    finally{setSaving(false);}
+  };
+
+  // ── BÆTA VIÐ FLOKKI ────────────────────────────
+  const addCategory = async () => {
+    const name = newCatName.trim();
+    if(!name) return;
+    if(!ghToken){showToast('GitHub token vantar');return;}
+    if(CATS.includes(name)){showToast('Þessi flokkur er þegar til');return;}
+    setSaving(true);
+    try{
+      const updated=[...extraCats, name];
+      await ghCommit(CONFIG_API, ghToken, buildFullConfig({extra_categories:updated}), `Bætti við flokki: ${name}`);
+      setExtraCats(updated); setNewCatName('');
+      showToast(`✓ Flokkurinn "${name}" bættur við!`);
+    }catch(e){showToast(`Villa: ${e.message}`);}
+    finally{setSaving(false);}
+  };
+
+  // ── BÆTA VIÐ BIRGJA ────────────────────────────
+  const addSupplier = async () => {
+    const name = newSupName.trim();
+    if(!name){showToast('Sláðu inn nafn birgja');return;}
+    if(!ghToken){showToast('GitHub token vantar');return;}
+    if(SUPS_LIST.includes(name)){showToast('Þessi birgi er þegar til');return;}
+    setSaving(true);
+    try{
+      const updated={...extraSups, [name]:newSupEmail.trim()};
+      await ghCommit(CONFIG_API, ghToken, buildFullConfig({extra_suppliers:updated}), `Bætti við birgja: ${name}`);
+      setExtraSups(updated); setNewSupName(''); setNewSupEmail('');
+      showToast(`✓ Birginn "${name}" bættur við!`);
     }catch(e){showToast(`Villa: ${e.message}`);}
     finally{setSaving(false);}
   };
@@ -467,7 +511,7 @@ function App(){
     if(!its.length)return;
     const dt=new Date().toLocaleDateString('is-IS');
     setOrderRefNum('');
-    setOrderShare({to:supName?(SUP_EMAILS[supName]||ADMIN_EMAIL):ADMIN_EMAIL,subject:supName?`Pöntun ${dt} – ${its.length} vörur`:`Pöntunaryfirlit ${dt} – ${count} vörur`,body:buildOrder(its,supName)});
+    setOrderShare({to:supName?(SUPS_MAP[supName]||ADMIN_EMAIL):ADMIN_EMAIL,subject:supName?`Pöntun ${dt} – ${its.length} vörur`:`Pöntunaryfirlit ${dt} – ${count} vörur`,body:buildOrder(its,supName)});
   };
 
   // ── CONFETTI / FLUGELDAR ─────────────────────
@@ -530,7 +574,13 @@ function App(){
 
   // ── MISC ──────────────────────────────────────
   const startVoice=()=>{const SR=window.SpeechRecognition||window.webkitSpeechRecognition;if(!SR){showToast('Hljóðþekking er ekki studd');return;}const r=new SR();r.lang='is-IS';r.onstart=()=>setListening(true);r.onend=()=>setListening(false);r.onerror=()=>setListening(false);r.onresult=e=>{setQuery(e.results[0][0].transcript);setAllCats(false);};r.start();};
-  const loginAdmin=()=>{const stored=localStorage.getItem('vrkst-pw')||DEFAULT_PW;if(pwInput===stored){setIsAdmin(true);setPwError(false);setPwInput('');}else setPwError(true);};
+  // Annar innskráður admin (auk aðal-lykilorðsins hér að ofan): "Búri"
+  const loginAdmin=()=>{
+    const stored=localStorage.getItem('vrkst-pw')||DEFAULT_PW;
+    if(pwInput===stored){setIsAdmin(true);setPwError(false);setPwInput('');}
+    else if(pwInput==='JLRburi'){setIsAdmin(true);setPwError(false);setPwInput('');setUserName('Búri');localStorage.setItem('vrkst-name','Búri');}
+    else setPwError(true);
+  };
   const showToast=msg=>{setToast(msg);setTimeout(()=>setToast(null),2800);};
 
   // ── DERIVED ───────────────────────────────────
@@ -540,6 +590,10 @@ function App(){
   const checkedGrp =useMemo(()=>grp(checkedList,'sup'),[checkedList]);
   const count      =checkedList.length;
   const suppliers  =useMemo(()=>[...new Set(items.filter(i=>i.cat===cat).map(i=>i.sup))],[items,cat]);
+  // Fullur listi flokka og birgja — grunngildi + það sem admin hefur bætt við
+  const CATS     = useMemo(()=>[...new Set(['Efnavörur','Perur',...extraCats])],[extraCats]);
+  const SUPS_MAP = useMemo(()=>({...SUP_EMAILS, ...extraSups}),[extraSups]);
+  const SUPS_LIST= useMemo(()=>Object.keys(SUPS_MAP),[SUPS_MAP]);
 
   const Divider=({label})=>(
     <div style={{display:'flex',alignItems:'center',padding:'8px 16px 2px',gap:8}}>
@@ -632,7 +686,7 @@ function App(){
       {view==='list'&&(
         <div style={{padding:'8px 16px',borderBottom:`1px solid ${C.bd}`,flexShrink:0}}>
           <div style={{display:'flex',gap:6,marginBottom:7}}>
-            {['Efnavörur','Perur'].map(c=>(
+            {CATS.map(c=>(
               <button key={c} className="tap" onClick={()=>{setCat(c);setSupF('');setAllCats(false);}}
                 style={{padding:'5px 13px',borderRadius:20,border:'none',background:cat===c&&!allCats?C.acc:C.s2,color:cat===c&&!allCats?'#fff':C.mut,fontSize:12,fontWeight:500,cursor:'pointer',display:'flex',alignItems:'center',gap:5}}>
                 {c==='Efnavörur'?<IBox s={11} c={cat===c&&!allCats?'#fff':C.mut}/>:<IBulb s={11} c={cat===c&&!allCats?'#fff':C.mut}/>}{c}
@@ -707,7 +761,7 @@ function App(){
                   {Object.entries(checkedGrp).map(([sup,its])=>(
                     <div key={sup} style={{margin:'12px 16px 0',background:C.s1,borderRadius:12,border:`1px solid ${C.bd}`,overflow:'hidden'}}>
                       <div style={{padding:'10px 14px 8px',borderBottom:`1px solid ${C.bd}`,display:'flex',alignItems:'center',justifyContent:'space-between'}}>
-                        <div><div style={{fontWeight:600,fontSize:14}}>{sup}</div>{SUP_EMAILS[sup]&&<div style={{fontSize:10,color:C.mut,fontFamily:"'Fira Code',monospace",marginTop:1}}>{SUP_EMAILS[sup]}</div>}</div>
+                        <div><div style={{fontWeight:600,fontSize:14}}>{sup}</div>{SUPS_MAP[sup]&&<div style={{fontSize:10,color:C.mut,fontFamily:"'Fira Code',monospace",marginTop:1}}>{SUPS_MAP[sup]}</div>}</div>
                         <button onClick={()=>openOrderShare(sup)} className="tap" style={{background:'rgba(232,93,4,.1)',border:'1px solid rgba(232,93,4,.25)',color:C.acc,padding:'5px 11px',borderRadius:8,fontSize:11,fontWeight:600,cursor:'pointer',display:'flex',alignItems:'center',gap:4,fontFamily:'inherit'}}><IMail s={11} c={C.acc}/> Senda</button>
                       </div>
                       {its.map((item,i)=>(
@@ -833,6 +887,32 @@ function App(){
 
               <div style={{height:1,background:C.bd,margin:'8px 0 14px'}}/>
 
+              {/* Flokkar */}
+              <div style={{fontSize:11,color:C.mut,letterSpacing:1,textTransform:'uppercase',marginBottom:6}}>Flokkar</div>
+              <div style={{display:'flex',flexWrap:'wrap',gap:6,marginBottom:8}}>
+                {CATS.map(c=><span key={c} style={{fontSize:11,padding:'4px 9px',borderRadius:10,background:C.s2,border:`1px solid ${C.bd}`,color:C.txt}}>{c}</span>)}
+              </div>
+              <Field value={newCatName} onChange={setNewCatName} placeholder="Nýr flokkur, t.d. Verkfæri"
+                action={{label:saving?'...':'Bæta við',fn:addCategory}}/>
+
+              <div style={{height:1,background:C.bd,margin:'8px 0 14px'}}/>
+
+              {/* Birgjar */}
+              <div style={{fontSize:11,color:C.mut,letterSpacing:1,textTransform:'uppercase',marginBottom:6}}>Birgjar</div>
+              <div style={{display:'flex',flexDirection:'column',gap:4,marginBottom:8,maxHeight:120,overflowY:'auto'}}>
+                {SUPS_LIST.map(s=>(
+                  <div key={s} style={{display:'flex',justifyContent:'space-between',fontSize:11,padding:'5px 9px',borderRadius:8,background:C.s2,border:`1px solid ${C.bd}`}}>
+                    <span style={{color:C.txt,fontWeight:500}}>{s}</span>
+                    <span style={{color:C.mut,fontFamily:"'Fira Code',monospace"}}>{SUPS_MAP[s]||'—'}</span>
+                  </div>
+                ))}
+              </div>
+              <Field value={newSupName} onChange={setNewSupName} placeholder="Nafn birgja, t.d. Bílanaust"/>
+              <Field value={newSupEmail} onChange={setNewSupEmail} placeholder="Netfang birgja (valfrjálst)" mono
+                action={{label:saving?'...':'Bæta við',fn:addSupplier}}/>
+
+              <div style={{height:1,background:C.bd,margin:'8px 0 14px'}}/>
+
               {/* GitHub token */}
               <Field label="GitHub token (til að breyta vörum)" value={ghToken} onChange={v=>{setGhToken(v);localStorage.setItem('vrkst-token',v);}} placeholder="ghp_xxxxxxxxxxxx" mono small
                 hint={ghToken?'✓ Virkur':'github.com → Settings → Developer settings → Tokens (classic) → repo scope'}/>
@@ -865,13 +945,13 @@ function App(){
           <div style={{marginBottom:12}}>
             <div style={{fontSize:11,color:C.mut,letterSpacing:1,textTransform:'uppercase',marginBottom:4}}>Flokkur</div>
             <div style={{display:'flex',gap:8}}>
-              {['Efnavörur','Perur'].map(c=><button key={c} onClick={()=>setNewItem(p=>({...p,cat:c}))} className="tap" style={{flex:1,padding:'8px',borderRadius:8,border:`1px solid ${newItem.cat===c?C.acc:C.bd}`,background:newItem.cat===c?'rgba(232,93,4,.12)':'transparent',color:newItem.cat===c?C.acc:C.mut,fontSize:13,cursor:'pointer',fontFamily:'inherit'}}>{c}</button>)}
+              {CATS.map(c=><button key={c} onClick={()=>setNewItem(p=>({...p,cat:c}))} className="tap" style={{flex:1,padding:'8px',borderRadius:8,border:`1px solid ${newItem.cat===c?C.acc:C.bd}`,background:newItem.cat===c?'rgba(232,93,4,.12)':'transparent',color:newItem.cat===c?C.acc:C.mut,fontSize:13,cursor:'pointer',fontFamily:'inherit'}}>{c}</button>)}
             </div>
           </div>
           <div style={{marginBottom:12}}>
             <div style={{fontSize:11,color:C.mut,letterSpacing:1,textTransform:'uppercase',marginBottom:4}}>Birgir</div>
             <select value={newItem.sup} onChange={e=>setNewItem(p=>({...p,sup:e.target.value}))} style={{width:'100%',background:C.s2,border:`1px solid ${C.bd}`,borderRadius:8,padding:'10px 12px',color:C.txt,fontSize:14,fontFamily:'inherit',outline:'none'}}>
-              {ALL_SUPS.map(s=><option key={s} value={s}>{s}</option>)}
+              {SUPS_LIST.map(s=><option key={s} value={s}>{s}</option>)}
             </select>
           </div>
           <Field label="Pöntunarmagn *" value={newItem.qty} onChange={v=>setNewItem(p=>({...p,qty:v}))} placeholder="t.d. 2 brúsar"/>
@@ -892,12 +972,12 @@ function App(){
           <Field label="Vörunúmer" value={editItem.sku||''} onChange={v=>setEditItem(p=>({...p,sku:v}))} placeholder="VNR" mono/>
           <div style={{marginBottom:12}}>
             <div style={{fontSize:11,color:C.mut,letterSpacing:1,textTransform:'uppercase',marginBottom:4}}>Flokkur</div>
-            <div style={{display:'flex',gap:8}}>{['Efnavörur','Perur'].map(c=><button key={c} onClick={()=>setEditItem(p=>({...p,cat:c}))} className="tap" style={{flex:1,padding:'8px',borderRadius:8,border:`1px solid ${editItem.cat===c?C.acc:C.bd}`,background:editItem.cat===c?'rgba(232,93,4,.12)':'transparent',color:editItem.cat===c?C.acc:C.mut,fontSize:13,cursor:'pointer',fontFamily:'inherit'}}>{c}</button>)}</div>
+            <div style={{display:'flex',gap:8}}>{CATS.map(c=><button key={c} onClick={()=>setEditItem(p=>({...p,cat:c}))} className="tap" style={{flex:1,padding:'8px',borderRadius:8,border:`1px solid ${editItem.cat===c?C.acc:C.bd}`,background:editItem.cat===c?'rgba(232,93,4,.12)':'transparent',color:editItem.cat===c?C.acc:C.mut,fontSize:13,cursor:'pointer',fontFamily:'inherit'}}>{c}</button>)}</div>
           </div>
           <div style={{marginBottom:12}}>
             <div style={{fontSize:11,color:C.mut,letterSpacing:1,textTransform:'uppercase',marginBottom:4}}>Birgir</div>
             <select value={editItem.sup} onChange={e=>setEditItem(p=>({...p,sup:e.target.value}))} style={{width:'100%',background:C.s2,border:`1px solid ${C.bd}`,borderRadius:8,padding:'10px 12px',color:C.txt,fontSize:14,fontFamily:'inherit',outline:'none'}}>
-              {ALL_SUPS.map(s=><option key={s} value={s}>{s}</option>)}
+              {SUPS_LIST.map(s=><option key={s} value={s}>{s}</option>)}
             </select>
           </div>
           <Field label="Magn *" value={editItem.qty} onChange={v=>setEditItem(p=>({...p,qty:v}))} placeholder="t.d. 2 brúsar"/>
