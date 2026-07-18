@@ -3,5 +3,9 @@
   "imgbb_key": "0a609e1292fa3a8895b60e43dcd3f9d2",
   "admin_name": "AMJ",
   "admin_email": "bl.froskur@gmail.com",
-  "firebase_url": "https://pantaamj-default-rtdb.europe-west1.firebasedatabase.app/"
+  "firebase_url": "https://pantaamj-default-rtdb.europe-west1.firebasedatabase.app/",
+  "extra_categories": [
+    "Verkfæri"
+  ],
+  "extra_suppliers": {}
 }
