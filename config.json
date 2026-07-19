@@ -5,7 +5,8 @@
   "admin_email": "bl.froskur@gmail.com",
   "firebase_url": "https://pantaamj-default-rtdb.europe-west1.firebasedatabase.app/",
   "extra_categories": [
-    "Verkfæri"
+    "Verkfæri",
+    "Rafmagnsverkfæri"
   ],
   "extra_suppliers": {
     "Sindri": "valur@sindri.is"
