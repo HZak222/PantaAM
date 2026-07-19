@@ -648,11 +648,19 @@
     "qty": "1 pk."
   },
   {
-    "id": "u1784424954182",
+    "id": "u178442493810",
     "name": "Toppur 3/8\"  10mm",
-    "sku": "gdsf",
-    "sup": "Kemi",
+    "sku": "3/8 toppur 10mm,
+    "sup": "Sindri",
     "cat": "Verkfæri",
-    "qty": "gsdf"
+    "qty": "1"
+  },
+  {
+    "id": "u178442493811",
+    "name": "Toppur 3/8\"  11mm",
+    "sku": "3/8 toppur 11mm",
+    "sup": "Sindri",
+    "cat": "Verkfæri",
+    "qty": "1"
   }
 ]
