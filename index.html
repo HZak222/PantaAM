@@ -96,20 +96,21 @@ const fbWriteChecked = async (fbUrl, data) => {
 };
 
 // ── Pöntunarsaga — vistuð handvirkt með "Vista í sögu" hnappi ──
+// Hver VARA fær sína EIGIN flötu færslu (ekki ein færsla með mörgum vörum
+// innan í) — þetta gerir talningu og CSV-útflutning einfaldan og beinan.
 const fbReadHistory = async (fbUrl) => {
   const res = await fetch(`${fbUrl}/history.json?t=${Date.now()}`);
   if(!res.ok) throw new Error(`Firebase villa: ${res.status}`);
   const d = await res.json();
   return d || {};
 };
-// Hver færsla fær eigin lykil (tímastimpill) svo hún skrifi aldrei yfir aðrar
-// færslur, jafnvel þótt tvö tæki vistuðu á sama augnabliki.
-const fbSaveHistoryEntry = async (fbUrl, entry) => {
-  const key = `h${Date.now()}`;
-  const res = await fetch(`${fbUrl}/history/${key}.json`, {
-    method: 'PUT',
+// Vistar margar flatar færslur í einu skrifi (ein PATCH-aðgerð) —
+// öruggt gagnvart öðrum tækjum sem gætu verið að skrifa á sama tíma.
+const fbSaveHistoryEntries = async (fbUrl, entriesMap) => {
+  const res = await fetch(`${fbUrl}/history.json`, {
+    method: 'PATCH',
     headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify(entry)
+    body: JSON.stringify(entriesMap)
   });
   if(!res.ok) throw new Error(`Firebase write villa: ${res.status}`);
 };
@@ -489,12 +490,27 @@ function App(){
   };
 
   // ── PÖNTUNARSAGA ───────────────────────────────
+  // Hver vara fær SÍNA EIGIN flötu færslu (ekki eina færslu með mörgum vörum
+  // innaní) — þannig er hægt að telja beint hversu oft hver vara var pöntuð.
+  // Gamlar færslur (með .items fylki) eru sjálfkrafa "dreifðar" út í flatar
+  // sýndarfærslur við lestur, svo eldri saga glatast ekki.
   const fetchHistory = async () => {
     if(!fbUrl) return [];
     setHistoryLoading(true);
     try{
       const raw = await fbReadHistory(fbUrl);
-      const arr = Object.values(raw).sort((a,b)=> new Date(b.date) - new Date(a.date));
+      const arr = [];
+      Object.entries(raw).forEach(([key,val])=>{
+        if(val && Array.isArray(val.items)){
+          val.items.forEach(it=>{
+            arr.push({batchId:key, date:val.date, by:val.by, supplier:val.supplier, refNum:val.refNum,
+                       itemId:it.id, name:it.name, sku:it.sku, sup:it.sup, qty:it.qty});
+          });
+        } else if(val){
+          arr.push({batchId: val.batchId||key, ...val});
+        }
+      });
+      arr.sort((a,b)=> new Date(b.date) - new Date(a.date));
       setHistoryEntries(arr);
       setHistoryLoaded(true);
       return arr;
@@ -502,49 +518,52 @@ function App(){
     finally{ setHistoryLoading(false); }
   };
 
-  // Vistar núverandi "Senda yfirlit" glugga sem eina færslu í söguna
+  // Vistar núverandi "Senda yfirlit" glugga — ein flöt færsla per vöru
   const saveToHistory = async () => {
     if(!fbUrl){ showToast('Firebase er ekki stillt (⚙️)'); return; }
     if(!orderShare) return;
     setSavingHistory(true);
     try{
-      const entry = {
-        date: new Date().toISOString(),
-        by: userName,
-        supplier: orderShare.supplierName || 'Allir birgjar',
-        refNum: orderRefNum || '',
-        items: (orderShare.items||[]).map(i=>({id:i.id, name:i.name, sku:i.sku||'', qty:i.qty, sup:i.sup}))
-      };
-      await fbSaveHistoryEntry(fbUrl, entry);
-      setHistoryEntries(prev=>[entry, ...prev]);
+      const batchId = `h${Date.now()}`;
+      const dateIso = new Date().toISOString();
+      const entriesMap = {}; const newLocal = [];
+      (orderShare.items||[]).forEach((it,idx)=>{
+        const entry = {batchId, date:dateIso, by:userName, supplier:orderShare.supplierName||'Allir birgjar', refNum:orderRefNum||'', itemId:it.id, name:it.name, sku:it.sku||'', sup:it.sup, qty:it.qty};
+        entriesMap[`${batchId}_${it.id||idx}`] = entry;
+        newLocal.push(entry);
+      });
+      await fbSaveHistoryEntries(fbUrl, entriesMap);
+      setHistoryEntries(prev=>[...newLocal, ...prev]);
       showToast('✓ Vistað í pöntunarsögu!');
     }catch(e){ showToast(`Villa: ${e.message}`); }
     finally{ setSavingHistory(false); }
   };
 
-  // Vistar ALLAN núverandi hakalistann sem eina færslu — notað úr "Hreinsa pöntun" staðfestingunni
+  // Vistar ALLAN núverandi hakalistann — notað úr "Hreinsa pöntun" staðfestingunni
   const saveToHistoryFromChecked = async () => {
     if(!fbUrl || !checkedList.length) return;
     try{
-      const entry = {
-        date: new Date().toISOString(),
-        by: userName,
-        supplier: 'Allir birgjar',
-        refNum: '',
-        items: checkedList.map(i=>({id:i.id, name:i.name, sku:i.sku||'', qty:i.qty, sup:i.sup}))
-      };
-      await fbSaveHistoryEntry(fbUrl, entry);
-      setHistoryEntries(prev=>[entry, ...prev]);
+      const batchId = `h${Date.now()}`;
+      const dateIso = new Date().toISOString();
+      const entriesMap = {}; const newLocal = [];
+      checkedList.forEach((it,idx)=>{
+        const entry = {batchId, date:dateIso, by:userName, supplier:'Allir birgjar', refNum:'', itemId:it.id, name:it.name, sku:it.sku||'', sup:it.sup, qty:it.qty};
+        entriesMap[`${batchId}_${it.id||idx}`] = entry;
+        newLocal.push(entry);
+      });
+      await fbSaveHistoryEntries(fbUrl, entriesMap);
+      setHistoryEntries(prev=>[...newLocal, ...prev]);
     }catch(e){ showToast(`Villa við að vista sögu: ${e.message}`); }
   };
 
   // Telur hversu oft tiltekin vara hefur komið fyrir í sögunni síðustu N mánuði
+  // — hver flöt færsla = ein pöntun, svo þetta er bara einföld talning núna.
   const countOrders = (entries, item, months) => {
     const cutoff = new Date();
     cutoff.setMonth(cutoff.getMonth()-months);
     return (entries||[]).filter(e=>{
       if(new Date(e.date) < cutoff) return false;
-      return (e.items||[]).some(it => (item.id && it.id && it.id===item.id) || (it.name===item.name && it.sku===item.sku));
+      return (item.id && e.itemId && e.itemId===item.id) || (e.name===item.name && e.sku===item.sku);
     }).length;
   };
 
@@ -554,16 +573,26 @@ function App(){
     setStatsItem({item, entries});
   };
 
-  // Sækir alla söguna sem .csv skrá (opnast beint í Excel/Sheets)
+  // Hópar flötu færslurnar aftur saman eftir batchId — bara fyrir SÝN
+  // í Saga-flipanum, svo pantanir líti út eins og áður (ein pöntun = einn kassi)
+  const groupedHistory = useMemo(()=>{
+    const g = {};
+    historyEntries.forEach(e=>{
+      const key = e.batchId || e.date;
+      if(!g[key]) g[key] = {key, date:e.date, by:e.by, supplier:e.supplier, refNum:e.refNum, items:[]};
+      g[key].items.push({name:e.name, sku:e.sku, qty:e.qty});
+    });
+    return Object.values(g).sort((a,b)=> new Date(b.date)-new Date(a.date));
+  },[historyEntries]);
+
+  // Sækir alla söguna sem .csv skrá — ein lína á hverja vöru, tilbúið fyrir talningu
   const exportHistoryCSV = () => {
     if(!historyEntries.length){ showToast('Engin saga til að sækja'); return; }
     const esc = v => `"${String(v??'').replace(/"/g,'""')}"`;
     let csv = 'Dagsetning,Sent af,Pöntunarhópur,Beiðnanúmer,Vara,VNR,Birgir,Magn\n';
     historyEntries.forEach(e=>{
       const dt = new Date(e.date).toLocaleString('is-IS');
-      (e.items||[]).forEach(it=>{
-        csv += [esc(dt), esc(e.by), esc(e.supplier), esc(e.refNum), esc(it.name), esc(it.sku), esc(it.sup||''), esc(it.qty)].join(',')+'\n';
-      });
+      csv += [esc(dt), esc(e.by), esc(e.supplier), esc(e.refNum), esc(e.name), esc(e.sku), esc(e.sup||''), esc(e.qty)].join(',')+'\n';
     });
     const blob = new Blob(['\uFEFF'+csv], {type:'text/csv;charset=utf-8;'});
     const url = URL.createObjectURL(blob);
@@ -907,7 +936,7 @@ function App(){
         {view==='history'&&isAdmin&&(
           <>
             <div style={{padding:'14px 16px 4px',display:'flex',alignItems:'center',justifyContent:'space-between'}}>
-              <div style={{fontSize:13,color:C.mut}}>{historyEntries.length} færslur vistaðar</div>
+              <div style={{fontSize:13,color:C.mut}}>{groupedHistory.length} pantanir skráðar · {historyEntries.length} vörulínur</div>
               <button onClick={exportHistoryCSV} disabled={!historyEntries.length} className="tap"
                 style={{background:'rgba(232,93,4,.1)',border:'1px solid rgba(232,93,4,.25)',color:C.acc,padding:'6px 12px',borderRadius:8,fontSize:12,fontWeight:600,cursor:'pointer',display:'flex',alignItems:'center',gap:6,fontFamily:'inherit',opacity:historyEntries.length?1:.4}}>
                 <IDownload s={13} c={C.acc}/> Sækja CSV
@@ -921,7 +950,7 @@ function App(){
               </div>
             )}
 
-            {!historyLoading&&historyEntries.length===0&&(
+            {!historyLoading&&groupedHistory.length===0&&(
               <div style={{textAlign:'center',padding:'70px 20px',color:C.mut}}>
                 <IClock s={42} c={C.mut} st={{opacity:.15}}/>
                 <div style={{fontSize:15,marginTop:14}}>Engin saga ennþá</div>
@@ -929,8 +958,8 @@ function App(){
               </div>
             )}
 
-            {!historyLoading&&historyEntries.map((e,idx)=>(
-              <div key={idx} style={{margin:'8px 16px',background:C.s1,borderRadius:12,border:`1px solid ${C.bd}`,overflow:'hidden'}}>
+            {!historyLoading&&groupedHistory.map((e)=>(
+              <div key={e.key} style={{margin:'8px 16px',background:C.s1,borderRadius:12,border:`1px solid ${C.bd}`,overflow:'hidden'}}>
                 <div style={{padding:'10px 14px',borderBottom:`1px solid ${C.bd}`,display:'flex',justifyContent:'space-between',alignItems:'center'}}>
                   <div>
                     <div style={{fontSize:13,fontWeight:600}}>{e.supplier}{e.refNum?` · ${e.refNum}`:''}</div>
