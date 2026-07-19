@@ -281,7 +281,6 @@ function App(){
   const [historyEntries, setHistoryEntries] = useState([]);
   const [historyLoaded,  setHistoryLoaded]  = useState(false);
   const [historyLoading, setHistoryLoading] = useState(false);
-  const [savingHistory,  setSavingHistory]  = useState(false);
   const [statsItem,      setStatsItem]      = useState(null); // {item, entries}
   const [clearConfirm,   setClearConfirm]   = useState(false);
 
@@ -518,26 +517,7 @@ function App(){
     finally{ setHistoryLoading(false); }
   };
 
-  // Vistar núverandi "Senda yfirlit" glugga — ein flöt færsla per vöru
-  const saveToHistory = async () => {
-    if(!fbUrl){ showToast('Firebase er ekki stillt (⚙️)'); return; }
-    if(!orderShare) return;
-    setSavingHistory(true);
-    try{
-      const batchId = `h${Date.now()}`;
-      const dateIso = new Date().toISOString();
-      const entriesMap = {}; const newLocal = [];
-      (orderShare.items||[]).forEach((it,idx)=>{
-        const entry = {batchId, date:dateIso, by:userName, supplier:orderShare.supplierName||'Allir birgjar', refNum:orderRefNum||'', itemId:it.id, name:it.name, sku:it.sku||'', sup:it.sup, qty:it.qty};
-        entriesMap[`${batchId}_${it.id||idx}`] = entry;
-        newLocal.push(entry);
-      });
-      await fbSaveHistoryEntries(fbUrl, entriesMap);
-      setHistoryEntries(prev=>[...newLocal, ...prev]);
-      showToast('✓ Vistað í pöntunarsögu!');
-    }catch(e){ showToast(`Villa: ${e.message}`); }
-    finally{ setSavingHistory(false); }
-  };
+
 
   // Vistar ALLAN núverandi hakalistann — notað úr "Hreinsa pöntun" staðfestingunni
   const saveToHistoryFromChecked = async () => {
@@ -586,13 +566,14 @@ function App(){
   },[historyEntries]);
 
   // Sækir alla söguna sem .csv skrá — ein lína á hverja vöru, tilbúið fyrir talningu
+  // Notar semíkommu (;) sem dálkaskil, þar sem íslenskt Excel notar kommu sem tugabrotstákn
   const exportHistoryCSV = () => {
     if(!historyEntries.length){ showToast('Engin saga til að sækja'); return; }
     const esc = v => `"${String(v??'').replace(/"/g,'""')}"`;
-    let csv = 'Dagsetning,Sent af,Pöntunarhópur,Beiðnanúmer,Vara,VNR,Birgir,Magn\n';
+    let csv = 'Dagsetning;Sent af;Pöntunarhópur;Beiðnanúmer;Vara;VNR;Birgir;Magn\n';
     historyEntries.forEach(e=>{
       const dt = new Date(e.date).toLocaleString('is-IS');
-      csv += [esc(dt), esc(e.by), esc(e.supplier), esc(e.refNum), esc(e.name), esc(e.sku), esc(e.sup||''), esc(e.qty)].join(',')+'\n';
+      csv += [esc(dt), esc(e.by), esc(e.supplier), esc(e.refNum), esc(e.name), esc(e.sku), esc(e.sup||''), esc(e.qty)].join(';')+'\n';
     });
     const blob = new Blob(['\uFEFF'+csv], {type:'text/csv;charset=utf-8;'});
     const url = URL.createObjectURL(blob);
@@ -1290,12 +1271,8 @@ function App(){
             const subj = orderRefNum ? `${orderRefNum} — ${orderShare.subject}` : orderShare.subject;
             const full = `Til: ${orderShare.to}\nEfni: ${subj}\n\n${orderShare.body}`;
             navigator.clipboard.writeText(full).then(()=>showToast('✓ Afritað — límdu inn í nýjan tölvupóst')).catch(()=>showToast('Gat ekki afritað'));
-          }} className="tap" style={{width:'100%',padding:14,borderRadius:12,border:'none',background:C.acc,color:'#fff',fontSize:14,fontWeight:600,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:8,fontFamily:'inherit',marginBottom:8}}>
+          }} className="tap" style={{width:'100%',padding:14,borderRadius:12,border:'none',background:C.acc,color:'#fff',fontSize:14,fontWeight:600,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:8,fontFamily:'inherit'}}>
             <ICopy s={16} c="#fff"/> Afrita fyrir tölvupóst
-          </button>
-          <button onClick={saveToHistory} disabled={savingHistory} className="tap" style={{width:'100%',padding:12,borderRadius:12,border:`1px solid ${C.bd}`,background:C.s2,color:C.txt,fontSize:13,fontWeight:600,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:7,fontFamily:'inherit',opacity:savingHistory?.6:1}}>
-            {savingHistory?<IRefresh s={14} c={C.txt} cls="spin"/>:<IBox s={14} c={C.txt}/>}
-            {savingHistory?'Vista...':'Vista í sögu'}
           </button>
         </Sheet>
       )}
