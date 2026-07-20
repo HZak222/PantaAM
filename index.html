@@ -177,6 +177,7 @@ const IWifi   =({s,c})=><Ic s={s} c={c} ch={<><path d="M1.42 9a16 16 0 0 1 21.16
 const IClock  =({s,c})=><Ic s={s} c={c} ch={<><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></>}/>;
 const IChart  =({s,c})=><Ic s={s} c={c} ch={<><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></>}/>;
 const IDownload=({s,c})=><Ic s={s} c={c} ch={<><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></>}/>;
+const IUpload  =({s,c})=><Ic s={s} c={c} ch={<><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></>}/>;
 
 const C={bg:'#0b0b0b',s1:'#141414',s2:'#1c1c1c',bd:'#272727',acc:'#E85D04',txt:'#efefef',mut:'#666',grn:'#22c55e',red:'#ef4444',amb:'#f59e0b'};
 
@@ -264,6 +265,9 @@ function App(){
 
   // Item CRUD
   const [newItem,    setNewItem]    = useState({name:'',sku:'',sup:'Kemi',cat:'Efnavörur',qty:''});
+  const [bulkText,      setBulkText]      = useState('');
+  const [bulkPreview,   setBulkPreview]   = useState(null); // {items,newCats,newSups}
+  const [bulkImporting, setBulkImporting] = useState(false);
   const [editItem,   setEditItem]   = useState(null);
   const [delId,      setDelId]      = useState(null);
 
@@ -441,6 +445,101 @@ function App(){
     catch(e){showToast(`Villa: ${e.message}`);}
     finally{setSaving(false);}
   };
+
+  // ── MAGNFLUTNINGUR (CSV úr Excel) ──────────────
+  // Einfaldur CSV-þáttari sem ræður við bæði ; og , sem dálkaskil, og gæsalappir
+  const parseCSVLine = (line, delim) => {
+    const result=[]; let cur=''; let q=false;
+    for(let i=0;i<line.length;i++){
+      const ch=line[i];
+      if(q){
+        if(ch==='"'){ if(line[i+1]==='"'){cur+='"';i++;} else q=false; }
+        else cur+=ch;
+      } else {
+        if(ch==='"') q=true;
+        else if(ch===delim){ result.push(cur); cur=''; }
+        else cur+=ch;
+      }
+    }
+    result.push(cur);
+    return result.map(s=>s.trim());
+  };
+
+  const downloadCSVTemplate = () => {
+    const csv = 'Nafn;VNR;Birgir;Flokkur;Magn\nDæmi vara;12345;Kemi;Efnavörur;2 stk\n';
+    const blob = new Blob(['\uFEFF'+csv], {type:'text/csv;charset=utf-8;'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href=url; a.download='vorur_snidmat.csv';
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  const onBulkFile = (e) => {
+    const f = e.target.files[0]; if(!f) return;
+    const reader = new FileReader();
+    reader.onload = ev => setBulkText(ev.target.result);
+    reader.readAsText(f, 'utf-8');
+    e.target.value='';
+  };
+
+  const previewBulkImport = () => {
+    const text = bulkText.trim();
+    if(!text){ showToast('Settu inn eða hladdu upp CSV fyrst'); return; }
+    const lines = text.split(/\r?\n/).filter(l=>l.trim().length>0);
+    if(lines.length<2){ showToast('Engar vörur fundust í skránni'); return; }
+    const semi=(lines[0].match(/;/g)||[]).length;
+    const comma=(lines[0].match(/,/g)||[]).length;
+    const delim = semi>=comma ? ';' : ',';
+    const header = parseCSVLine(lines[0],delim).map(h=>h.toLowerCase());
+    const findCol=(aliases)=>{ for(const a of aliases){ const idx=header.findIndex(h=>h.includes(a)); if(idx>=0) return idx; } return -1; };
+    const nameIdx=findCol(['nafn','name']);
+    const skuIdx=findCol(['vnr','sku','vörunúmer']);
+    const supIdx=findCol(['birg','sup']);
+    const catIdx=findCol(['flokk','cat']);
+    const qtyIdx=findCol(['magn','qty']);
+    if(nameIdx<0){ showToast('Fann ekki dálkinn "Nafn" — athugaðu sniðmátið'); return; }
+
+    const newItemsList=[]; const seenCats=new Set(); const seenSups=new Set();
+    lines.slice(1).forEach((line,idx)=>{
+      const cols = parseCSVLine(line, delim);
+      const name = (cols[nameIdx]||'').trim();
+      if(!name) return;
+      const sup = ((supIdx>=0?cols[supIdx]:'')||'').trim() || 'Kemi';
+      const cat = ((catIdx>=0?cols[catIdx]:'')||'').trim() || 'Efnavörur';
+      const qty = ((qtyIdx>=0?cols[qtyIdx]:'')||'').trim() || '1 stk';
+      const sku = ((skuIdx>=0?cols[skuIdx]:'')||'').trim();
+      newItemsList.push({id:`imp${Date.now()}_${idx}`, name, sku, sup, cat, qty});
+      seenCats.add(cat); seenSups.add(sup);
+    });
+    if(!newItemsList.length){ showToast('Engar gildar vörur fundust'); return; }
+
+    const newCats = [...seenCats].filter(c=>!CATS.includes(c));
+    const newSups = [...seenSups].filter(s=>!SUPS_LIST.includes(s));
+    setBulkPreview({items:newItemsList, newCats, newSups});
+  };
+
+  const confirmBulkImport = async () => {
+    if(!bulkPreview) return;
+    if(!ghToken){ showToast('GitHub token vantar'); return; }
+    setBulkImporting(true);
+    try{
+      if(bulkPreview.newCats.length || bulkPreview.newSups.length){
+        const updatedCats = [...new Set([...extraCats, ...bulkPreview.newCats])];
+        const updatedSups = {...extraSups};
+        bulkPreview.newSups.forEach(s=>{ if(!(s in updatedSups)) updatedSups[s]=''; });
+        await ghCommit(CONFIG_API, ghToken, buildFullConfig({extra_categories:updatedCats, extra_suppliers:updatedSups}), `Flutti inn ${bulkPreview.newCats.length} flokka / ${bulkPreview.newSups.length} birgja`);
+        setExtraCats(updatedCats); setExtraSups(updatedSups);
+      }
+      const updatedItems = [...items, ...bulkPreview.items];
+      await ghCommit(ITEMS_API, ghToken, updatedItems, `Flutti inn ${bulkPreview.items.length} vörur (CSV)`);
+      setItems(updatedItems);
+      localStorage.setItem('vrkst-items', JSON.stringify(updatedItems));
+      showToast(`✓ ${bulkPreview.items.length} vörur fluttar inn!`);
+      setBulkText(''); setBulkPreview(null); setModal(null);
+    }catch(e){ showToast(`Villa: ${e.message}`); }
+    finally{ setBulkImporting(false); }
+  };
+
   const saveEdit=async()=>{
     if(!editItem?.name?.trim()||!editItem?.qty?.trim()) return showToast('Fylltu út nafn og magn');
     setSaving(true);
@@ -1096,6 +1195,10 @@ function App(){
               <Field label="GitHub token (til að breyta vörum)" value={ghToken} onChange={v=>{setGhToken(v);localStorage.setItem('vrkst-token',v);}} placeholder="ghp_xxxxxxxxxxxx" mono small
                 hint={ghToken?'✓ Virkur':'github.com → Settings → Developer settings → Tokens (classic) → repo scope'}/>
 
+              <button onClick={()=>{setModal('bulkImport');}} className="tap" style={{width:'100%',padding:11,borderRadius:10,border:`1px solid ${C.bd}`,background:C.s2,color:C.txt,fontSize:13,fontWeight:600,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:7,fontFamily:'inherit',marginTop:10}}>
+                <IUpload s={14} c={C.acc}/> Flytja inn margar vörur (CSV úr Excel)
+              </button>
+
               {/* Save all to config.json */}
               {(settW3||settImgbb||settFbUrl)&&(
                 <button onClick={()=>{
@@ -1140,6 +1243,60 @@ function App(){
               {saving?<IRefresh s={14} c="#fff" cls="spin"/>:<IPlus s={14} c="#fff"/>}{saving?'Vista...':'Bæta við'}
             </button>
           </div>
+        </Sheet>
+      )}
+
+      {/* BULK IMPORT (CSV) */}
+      {modal==='bulkImport'&&(
+        <Sheet onClose={()=>{setModal(null);setBulkPreview(null);}} z={210}>
+          <div style={{fontWeight:700,fontSize:17,marginBottom:4}}>Flytja inn margar vörur</div>
+          <div style={{fontSize:12,color:C.mut,marginBottom:16,lineHeight:1.5}}>Búðu til lista í Excel með dálkunum <b>Nafn, VNR, Birgir, Flokkur, Magn</b> (röð skiptir ekki máli), vistaðu sem CSV og hlaðaðu upp hér.</div>
+
+          <button onClick={downloadCSVTemplate} className="tap" style={{width:'100%',padding:10,borderRadius:8,border:`1px solid ${C.bd}`,background:C.s2,color:C.txt,fontSize:12,fontWeight:600,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:6,fontFamily:'inherit',marginBottom:14}}>
+            <IDownload s={13} c={C.txt}/> Sækja sniðmát (Excel/CSV)
+          </button>
+
+          {!bulkPreview&&(
+            <>
+              <input id="bulkFileInput" type="file" accept=".csv,text/csv" style={{display:'none'}} onChange={onBulkFile}/>
+              <label htmlFor="bulkFileInput" className="tap" style={{width:'100%',padding:11,borderRadius:8,border:`1px dashed ${C.bd}`,background:'transparent',color:C.mut,fontSize:13,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:7,fontFamily:'inherit',marginBottom:10}}>
+                <IUpload s={14} c={C.mut}/> Velja CSV skrá
+              </label>
+              <div style={{fontSize:11,color:C.mut,letterSpacing:1,textTransform:'uppercase',marginBottom:4}}>Eða líma CSV-texta beint</div>
+              <textarea value={bulkText} onChange={e=>setBulkText(e.target.value)} rows={6} placeholder="Nafn;VNR;Birgir;Flokkur;Magn&#10;WD-40 sprey;wd40-400;Kemi;Efnavörur;2 stk"
+                style={{width:'100%',background:C.s2,border:`1px solid ${C.bd}`,borderRadius:8,padding:'10px 12px',color:C.txt,fontSize:12,fontFamily:"'Fira Code',monospace",outline:'none',resize:'vertical',marginBottom:14}}/>
+              <div style={{display:'flex',gap:8}}>
+                <button onClick={()=>{setModal(null);setBulkText('');}} className="tap" style={{flex:1,padding:12,borderRadius:10,border:`1px solid ${C.bd}`,background:'none',color:C.mut,fontSize:13,cursor:'pointer',fontFamily:'inherit'}}>Hætta við</button>
+                <button onClick={previewBulkImport} className="tap" style={{flex:2,padding:12,borderRadius:10,border:'none',background:C.acc,color:'#fff',fontSize:13,fontWeight:600,cursor:'pointer',fontFamily:'inherit'}}>Forskoða</button>
+              </div>
+            </>
+          )}
+
+          {bulkPreview&&(
+            <>
+              <div style={{background:'rgba(34,197,94,.08)',border:`1px solid rgba(34,197,94,.2)`,borderRadius:10,padding:'12px 14px',marginBottom:12}}>
+                <div style={{fontSize:13,color:C.grn,fontWeight:700,marginBottom:4}}>{bulkPreview.items.length} vörur fundust</div>
+                {bulkPreview.newCats.length>0&&<div style={{fontSize:12,color:'#fbbf24',marginTop:4}}>+ {bulkPreview.newCats.length} nýir flokkar: {bulkPreview.newCats.join(', ')}</div>}
+                {bulkPreview.newSups.length>0&&<div style={{fontSize:12,color:'#c084fc',marginTop:4}}>+ {bulkPreview.newSups.length} nýir birgjar: {bulkPreview.newSups.join(', ')}</div>}
+              </div>
+              <div style={{maxHeight:200,overflowY:'auto',background:C.bg,border:`1px solid ${C.bd}`,borderRadius:10,padding:'8px 12px',marginBottom:14}}>
+                {bulkPreview.items.slice(0,50).map((it,i)=>(
+                  <div key={i} style={{fontSize:12,color:C.txt,padding:'5px 0',borderBottom:i<bulkPreview.items.length-1?`1px solid ${C.bd}`:'none'}}>
+                    {it.name} <span style={{color:C.mut}}>· {it.sup} · {it.cat} · {it.qty}</span>
+                  </div>
+                ))}
+                {bulkPreview.items.length>50&&<div style={{fontSize:11,color:C.mut,padding:'6px 0'}}>...og {bulkPreview.items.length-50} til viðbótar</div>}
+              </div>
+              <div style={{display:'flex',gap:8}}>
+                <button onClick={()=>setBulkPreview(null)} className="tap" style={{flex:1,padding:12,borderRadius:10,border:`1px solid ${C.bd}`,background:'none',color:C.mut,fontSize:13,cursor:'pointer',fontFamily:'inherit'}}>Til baka</button>
+                <button onClick={confirmBulkImport} disabled={bulkImporting||!ghToken} className="tap" style={{flex:2,padding:12,borderRadius:10,border:'none',background:ghToken?C.acc:'#333',color:'#fff',fontSize:13,fontWeight:600,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:6,fontFamily:'inherit'}}>
+                  {bulkImporting?<IRefresh s={14} c="#fff" cls="spin"/>:<IUpload s={14} c="#fff"/>}
+                  {bulkImporting?'Flyt inn...':`Flytja inn ${bulkPreview.items.length} vörur`}
+                </button>
+              </div>
+              {!ghToken&&<div style={{fontSize:11,color:C.red,marginTop:8}}>GitHub token vantar — settu inn hér að ofan í stillingum fyrst</div>}
+            </>
+          )}
         </Sheet>
       )}
 
