@@ -662,5 +662,125 @@
     "sup": "Sindri",
     "cat": "Verkfæri",
     "qty": "1stk"
+  },
+  {
+    "id": "imp1784680218501_0",
+    "name": "Dæmi vara",
+    "sku": "12345",
+    "sup": "Kemi",
+    "cat": "Efnavörur",
+    "qty": "2 stk"
+  },
+  {
+    "id": "imp1784680218501_1",
+    "name": "3/8\"toppur  7mm",
+    "sku": "3/8\"toppur  7mm",
+    "sup": "Sindri",
+    "cat": "Verkfæri",
+    "qty": "1 stk"
+  },
+  {
+    "id": "imp1784680218501_2",
+    "name": "3/8\"toppur  8mm",
+    "sku": "3/8\"toppur  8mm",
+    "sup": "Sindri",
+    "cat": "Verkfæri",
+    "qty": "1 stk"
+  },
+  {
+    "id": "imp1784680218501_3",
+    "name": "3/8\"toppur  9mm",
+    "sku": "3/8\"toppur  9mm",
+    "sup": "Sindri",
+    "cat": "Verkfæri",
+    "qty": "1 stk"
+  },
+  {
+    "id": "imp1784680218501_4",
+    "name": "3/8\"toppur  10mm",
+    "sku": "3/8\"toppur  10mm",
+    "sup": "Sindri",
+    "cat": "Verkfæri",
+    "qty": "1 stk"
+  },
+  {
+    "id": "imp1784680218501_5",
+    "name": "3/8\"toppur  11mm",
+    "sku": "3/8\"toppur  11mm",
+    "sup": "Sindri",
+    "cat": "Verkfæri",
+    "qty": "1 stk"
+  },
+  {
+    "id": "imp1784680218501_6",
+    "name": "3/8\"toppur  12mm",
+    "sku": "3/8\"toppur  12mm",
+    "sup": "Sindri",
+    "cat": "Verkfæri",
+    "qty": "1 stk"
+  },
+  {
+    "id": "imp1784680218501_7",
+    "name": "3/8\"toppur  13mm",
+    "sku": "3/8\"toppur  13mm",
+    "sup": "Sindri",
+    "cat": "Verkfæri",
+    "qty": "1 stk"
+  },
+  {
+    "id": "imp1784680218501_8",
+    "name": "3/8\"toppur  14mm",
+    "sku": "3/8\"toppur  14mm",
+    "sup": "Sindri",
+    "cat": "Verkfæri",
+    "qty": "1 stk"
+  },
+  {
+    "id": "imp1784680218501_9",
+    "name": "3/8\"toppur  15mm",
+    "sku": "3/8\"toppur  15mm",
+    "sup": "Sindri",
+    "cat": "Verkfæri",
+    "qty": "1 stk"
+  },
+  {
+    "id": "imp1784680218501_10",
+    "name": "3/8\"toppur  16mm",
+    "sku": "3/8\"toppur  16mm",
+    "sup": "Sindri",
+    "cat": "Verkfæri",
+    "qty": "1 stk"
+  },
+  {
+    "id": "imp1784680218501_11",
+    "name": "3/8\"toppur  17mm",
+    "sku": "3/8\"toppur  17mm",
+    "sup": "Sindri",
+    "cat": "Verkfæri",
+    "qty": "1 stk"
+  },
+  {
+    "id": "imp1784680218501_12",
+    "name": "3/8\"toppur  18mm",
+    "sku": "3/8\"toppur  18mm",
+    "sup": "Sindri",
+    "cat": "Verkfæri",
+    "qty": "1 stk"
+  },
+  {
+    "id": "imp1784680218501_13",
+    "name": "3/8\"toppur  19mm",
+    "sku": "3/8\"toppur  19mm",
+    "sup": "Sindri",
+    "cat": "Verkfæri",
+    "qty": "1 stk"
+  },
+  {
+    "id": "imp1784680218501_14",
+    "name": "3/8\"toppur  20mm",
+    "sku": "3/8\"toppur  20mm",
+    "sup": "Sindri",
+    "cat": "Verkfæri",
+    "qty": "1 stk"
   }
 ]
