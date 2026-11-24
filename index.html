@@ -7,15 +7,15 @@
   <link rel="manifest" href="manifest.json">
   <link rel="apple-touch-icon" href="icon.svg">
   <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="apple-mobile-web-app-title" content="Verkstæðið">
   <meta name="theme-color" content="#E85D04">
   <link href="https://fonts.googleapis.com/css2?family=Oxanium:wght@500;700&family=DM+Sans:wght@400;500;600&family=Fira+Code&display=swap" rel="stylesheet">
   <style>
     *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
     html,body,#root{height:100%;overflow:hidden;}
-    body{background:#0b0b0b;font-family:'DM Sans',-apple-system,sans-serif;color:#efefef;}
-    ::-webkit-scrollbar{width:3px;}::-webkit-scrollbar-thumb{background:#2a2a2a;border-radius:2px;}
+    body{background:#f4f5f7;font-family:'DM Sans',-apple-system,sans-serif;color:#1a1d21;}
+    ::-webkit-scrollbar{width:3px;}::-webkit-scrollbar-thumb{background:#c3c8d0;border-radius:2px;}
     .tap{cursor:pointer;transition:opacity .1s,transform .1s;}.tap:active{opacity:.75;transform:scale(.97);}
     .hscroll{display:flex;gap:6px;overflow-x:auto;padding-bottom:2px;}.hscroll::-webkit-scrollbar{display:none;}
     input,textarea,select{-webkit-appearance:none;appearance:none;}button{font-family:inherit;}
@@ -179,7 +179,7 @@ const IChart  =({s,c})=><Ic s={s} c={c} ch={<><line x1="18" y1="20" x2="18" y2="
 const IDownload=({s,c})=><Ic s={s} c={c} ch={<><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></>}/>;
 const IUpload  =({s,c})=><Ic s={s} c={c} ch={<><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></>}/>;
 
-const C={bg:'#0b0b0b',s1:'#141414',s2:'#1c1c1c',bd:'#272727',acc:'#E85D04',txt:'#efefef',mut:'#666',grn:'#22c55e',red:'#ef4444',amb:'#f59e0b'};
+const C={bg:'#f4f5f7',s1:'#ffffff',s2:'#eceef1',bd:'#d5d9df',acc:'#E85D04',txt:'#1a1d21',mut:'#5f6773',grn:'#16a34a',red:'#dc2626',amb:'#d97706'};
 
 // ══════════════════════════════════════════════
 //  REUSABLE UI
@@ -192,7 +192,7 @@ const Field=({label,value,onChange,placeholder,type='text',mono=false,hint,actio
         style={{flex:1,background:C.s2,border:`1px solid ${C.bd}`,borderRadius:8,padding:small?'7px 10px':'9px 11px',color:C.txt,fontSize:small?12:13,fontFamily:mono?'\'Fira Code\',monospace':'inherit',outline:'none'}}/>
       {action&&<button onClick={action.fn} className="tap" style={{padding:'9px 12px',borderRadius:8,border:'none',background:C.acc,color:'#fff',fontSize:12,fontWeight:600,cursor:'pointer',whiteSpace:'nowrap',fontFamily:'inherit'}}>{action.label}</button>}
     </div>
-    {hint&&<div style={{fontSize:11,color:'#555',marginTop:4,lineHeight:1.5,whiteSpace:'pre-wrap'}}>{hint}</div>}
+    {hint&&<div style={{fontSize:11,color:'#6b7280',marginTop:4,lineHeight:1.5,whiteSpace:'pre-wrap'}}>{hint}</div>}
   </div>
 );
 
@@ -292,6 +292,7 @@ function App(){
   useEffect(()=>{
     const n=localStorage.getItem('vrkst-name'); if(n){setUserName(n);setNameSet(true);}
     const tk=localStorage.getItem('vrkst-token'); if(tk) setGhToken(tk);
+    try{const a=JSON.parse(localStorage.getItem('vrkst-admin')||'null'); if(a&&a.exp>Date.now()) setIsAdmin(true);}catch{}
     fetchConfig();
     fetchItems();
   },[]);
@@ -799,10 +800,11 @@ function App(){
   // ── MISC ──────────────────────────────────────
   const startVoice=()=>{const SR=window.SpeechRecognition||window.webkitSpeechRecognition;if(!SR){showToast('Hljóðþekking er ekki studd');return;}const r=new SR();r.lang='is-IS';r.onstart=()=>setListening(true);r.onend=()=>setListening(false);r.onerror=()=>setListening(false);r.onresult=e=>{setQuery(e.results[0][0].transcript);setAllCats(false);};r.start();};
   // Annar innskráður admin (auk aðal-lykilorðsins hér að ofan): "Búri"
+  const rememberAdmin=()=>{try{localStorage.setItem('vrkst-admin',JSON.stringify({exp:Date.now()+30*24*3600*1000}));}catch{}};
   const loginAdmin=()=>{
     const stored=localStorage.getItem('vrkst-pw')||DEFAULT_PW;
-    if(pwInput===stored){setIsAdmin(true);setPwError(false);setPwInput('');}
-    else if(pwInput==='JLRburi'){setIsAdmin(true);setPwError(false);setPwInput('');setUserName('Búri');localStorage.setItem('vrkst-name','Búri');}
+    if(pwInput===stored){setIsAdmin(true);rememberAdmin();setPwError(false);setPwInput('');}
+    else if(pwInput==='JLRburi'){setIsAdmin(true);rememberAdmin();setPwError(false);setPwInput('');setUserName('Búri');localStorage.setItem('vrkst-name','Búri');}
     else setPwError(true);
   };
   const showToast=msg=>{setToast(msg);setTimeout(()=>setToast(null),2800);};
@@ -938,7 +940,7 @@ function App(){
             {!fbUrl&&configReady&&!isAdmin&&(
               <div style={{margin:'16px',padding:'12px 14px',background:'rgba(245,158,11,.06)',border:`1px solid rgba(245,158,11,.15)`,borderRadius:10,display:'flex',gap:10,alignItems:'flex-start'}}>
                 <IWifi s={16} c={C.amb} st={{flexShrink:0,marginTop:2}}/>
-                <div style={{fontSize:12,color:'#999',lineHeight:1.5}}>Deiling milli tækja er ekki sett upp. Admin þarf að stilla Firebase í stillingum (⚙️).</div>
+                <div style={{fontSize:12,color:'#5f6773',lineHeight:1.5}}>Deiling milli tækja er ekki sett upp. Admin þarf að stilla Firebase í stillingum (⚙️).</div>
               </div>
             )}
             {Object.entries(grouped).map(([sup,its])=>(
@@ -946,26 +948,26 @@ function App(){
                 <Divider label={sup}/>
                 {its.map(item=>(
                   <div key={item.id} style={{display:'flex',alignItems:'center',padding:'10px 16px',gap:11,
-                    background:checked[item.id]?'rgba(34,197,94,.06)':'transparent',
+                    background:checked[item.id]?'rgba(34,197,94,.14)':'transparent',
                     borderLeft:checked[item.id]?`3px solid ${C.grn}`:'3px solid transparent',
                     transition:'background .12s,border-color .12s'}}>
                     {/* Checkbox */}
-                    <div onClick={()=>toggle(item.id)} className="tap" style={{width:22,height:22,borderRadius:6,flexShrink:0,cursor:'pointer',border:`2px solid ${checked[item.id]?C.grn:'#3a3a3a'}`,background:checked[item.id]?C.grn:'transparent',display:'flex',alignItems:'center',justifyContent:'center',transition:'all .15s'}}>
+                    <div onClick={()=>toggle(item.id)} className="tap" style={{width:22,height:22,borderRadius:6,flexShrink:0,cursor:'pointer',border:`2px solid ${checked[item.id]?C.grn:'#9aa1ac'}`,background:checked[item.id]?C.grn:'transparent',display:'flex',alignItems:'center',justifyContent:'center',transition:'all .15s'}}>
                       {checked[item.id]&&<ICheck s={13} c="#fff"/>}
                     </div>
                     {/* Name */}
                     <div onClick={()=>toggle(item.id)} className="tap" style={{flex:1,minWidth:0,cursor:'pointer'}}>
-                      <div style={{fontSize:14,fontWeight:500,color:checked[item.id]?'#3a3a3a':C.txt,textDecoration:checked[item.id]?'line-through':'none',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{item.name}</div>
-                      <div style={{fontSize:10,color:'#3d3d3d',marginTop:1,fontFamily:"'Fira Code',monospace",display:'flex',gap:8}}>
+                      <div style={{fontSize:14,fontWeight:500,color:checked[item.id]?C.mut:C.txt,textDecoration:checked[item.id]?'line-through':'none',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{item.name}</div>
+                      <div style={{fontSize:12,fontWeight:500,color:'#374151',marginTop:2,fontFamily:"'Fira Code',monospace",display:'flex',gap:8}}>
                         {item.sku&&<span>#{item.sku}</span>}<span>→ {item.qty}</span>
                       </div>
                     </div>
                     {/* Admin edit/delete/stats */}
                     {isAdmin&&(
                       <div style={{display:'flex',gap:2,flexShrink:0}}>
-                        <button onClick={()=>openItemStats(item)} className="tap" style={{background:'none',border:'none',cursor:'pointer',padding:6,display:'flex'}}><IChart s={14} c="#555"/></button>
-                        <button onClick={()=>setEditItem({...item})} className="tap" style={{background:'none',border:'none',cursor:'pointer',padding:6,display:'flex'}}><IEdit s={14} c="#555"/></button>
-                        <button onClick={()=>setDelId(item.id)} className="tap" style={{background:'none',border:'none',cursor:'pointer',padding:6,display:'flex'}}><ITrash s={14} c="#555"/></button>
+                        <button onClick={()=>openItemStats(item)} className="tap" style={{background:'none',border:'none',cursor:'pointer',padding:6,display:'flex'}}><IChart s={14} c="#6b7280"/></button>
+                        <button onClick={()=>setEditItem({...item})} className="tap" style={{background:'none',border:'none',cursor:'pointer',padding:6,display:'flex'}}><IEdit s={14} c="#6b7280"/></button>
+                        <button onClick={()=>setDelId(item.id)} className="tap" style={{background:'none',border:'none',cursor:'pointer',padding:6,display:'flex'}}><ITrash s={14} c="#6b7280"/></button>
                       </div>
                     )}
                   </div>
@@ -992,7 +994,7 @@ function App(){
                       {its.map((item,i)=>(
                         <div key={item.id} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'8px 14px',borderBottom:i<its.length-1?`1px solid ${C.bd}`:'none'}}>
                           <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:500,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{item.name}</div><div style={{fontSize:10,color:C.mut,fontFamily:"'Fira Code',monospace",marginTop:1}}>{item.sku?`#${item.sku} · `:''}{item.qty}</div></div>
-                          <button onClick={()=>toggle(item.id)} className="tap" style={{background:'none',border:'none',cursor:'pointer',padding:4,display:'flex',marginLeft:8}}><IX s={13} c="#555"/></button>
+                          <button onClick={()=>toggle(item.id)} className="tap" style={{background:'none',border:'none',cursor:'pointer',padding:4,display:'flex',marginLeft:8}}><IX s={13} c="#6b7280"/></button>
                         </div>
                       ))}
                     </div>
@@ -1001,7 +1003,7 @@ function App(){
                     <button onClick={()=>openOrderShare()} className="tap" style={{width:'100%',padding:14,borderRadius:12,border:'none',background:C.acc,color:'#fff',fontSize:14,fontWeight:600,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:8,fontFamily:'inherit'}}>
                       <IMail s={16} c="#fff"/> Senda yfirlit til mín · {count} vörur
                     </button>
-                    <button onClick={()=>setClearConfirm(true)} className="tap" style={{width:'100%',padding:12,borderRadius:12,background:'transparent',border:`1px solid #2a2a2a`,color:C.mut,fontSize:13,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:7,fontFamily:'inherit'}}>
+                    <button onClick={()=>setClearConfirm(true)} className="tap" style={{width:'100%',padding:12,borderRadius:12,background:'transparent',border:`1px solid ${C.bd}`,color:C.mut,fontSize:13,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:7,fontFamily:'inherit'}}>
                       <ITrash s={13} c={C.mut}/> Hreinsa pöntun (eftir sendingu)
                     </button>
                   </div>
@@ -1113,7 +1115,7 @@ function App(){
             </>
           ):(
             <>
-              <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:16}}><IKey s={14} c={C.acc}/><span style={{fontSize:13,color:C.acc,fontWeight:600}}>Admin stillingar</span><button onClick={()=>setIsAdmin(false)} style={{marginLeft:'auto',background:'none',border:'none',color:C.mut,cursor:'pointer',fontSize:11,padding:'4px 8px',borderRadius:6,fontFamily:'inherit'}}>Útskrá</button></div>
+              <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:16}}><IKey s={14} c={C.acc}/><span style={{fontSize:13,color:C.acc,fontWeight:600}}>Admin stillingar</span><button onClick={()=>{setIsAdmin(false);localStorage.removeItem('vrkst-admin');}} style={{marginLeft:'auto',background:'none',border:'none',color:C.mut,cursor:'pointer',fontSize:11,padding:'4px 8px',borderRadius:6,fontFamily:'inherit'}}>Útskrá</button></div>
 
               <Field label="Nýtt lykilorð" value={newPw} onChange={setNewPw} placeholder="Breyta lykilorði" type="password"
                 action={newPw?{label:'Vista',fn:()=>{localStorage.setItem('vrkst-pw',newPw);setNewPw('');showToast('✓ Lykilorð breytt!');}}:undefined}/>
@@ -1122,7 +1124,7 @@ function App(){
 
               {/* Firebase setup */}
               <div style={{background: fbUrl&&!isValidFbUrl(fbUrl)?'rgba(239,68,68,.08)':'rgba(255,170,0,.06)', border: `1px solid ${fbUrl&&!isValidFbUrl(fbUrl)?'rgba(239,68,68,.3)':'rgba(255,170,0,.15)'}`, borderRadius:10, padding:'12px 14px', marginBottom:14}}>
-                <div style={{fontSize:11,color:'#fbbf24',fontWeight:600,marginBottom:8}}>🔥 FIREBASE — DEILING MILLI TÆKJA</div>
+                <div style={{fontSize:11,color:'#b45309',fontWeight:600,marginBottom:8}}>🔥 FIREBASE — DEILING MILLI TÆKJA</div>
                 {fbUrl&&!isValidFbUrl(fbUrl)
                   ?<div style={{fontSize:12,color:C.red,lineHeight:1.6}}>
                     ⚠️ Þessi slóð er ekki rétt — hún lítur út eins og Firebase <b>Console</b>-slóðin (þar sem þú stjórnar verkefninu), ekki gagnagrunns-slóðin sjálf sem appið þarf.<br/><br/>
@@ -1130,9 +1132,9 @@ function App(){
                   </div>
                   :fbUrl
                   ?<div style={{fontSize:12,color:C.grn,display:'flex',alignItems:'center',gap:6}}><ICheck s={13} c={C.grn}/> Virkur — hakarnir deila sér á milli allra tækja</div>
-                  :<div style={{fontSize:12,color:'#888',lineHeight:1.7}}>
+                  :<div style={{fontSize:12,color:'#5f6773',lineHeight:1.7}}>
                     Ókeypis, ótakmarkaðar beiðnir. Bara þörf á einum URL.<br/>
-                    1. <b style={{color:'#fbbf24'}}>console.firebase.google.com</b> → Add project<br/>
+                    1. <b style={{color:'#b45309'}}>console.firebase.google.com</b> → Add project<br/>
                     2. Build → Realtime Database → Create database<br/>
                     3. Veldu "Start in test mode" → Enable<br/>
                     4. Á "Data" flipanum — afritaðu slóðina EFST á síðunni (t.d. https://xxx-default-rtdb.firebaseio.com) — EKKI slóðina úr vafranum þínum<br/>
@@ -1148,7 +1150,7 @@ function App(){
               {/* Web3Forms */}
               <div style={{background:'rgba(34,197,94,.06)',border:`1px solid rgba(34,197,94,.15)`,borderRadius:10,padding:'12px 14px',marginBottom:14}}>
                 <div style={{fontSize:11,color:C.grn,fontWeight:600,marginBottom:4}}>WEB3FORMS (tölvupóstlykill)</div>
-                {web3Key?<div style={{fontSize:12,color:C.grn,display:'flex',alignItems:'center',gap:6}}><ICheck s={13} c={C.grn}/> Virkur</div>:<div style={{fontSize:12,color:'#888'}}>web3forms.com → settu inn bl.froskur@gmail.com → "Create Access Key"</div>}
+                {web3Key?<div style={{fontSize:12,color:C.grn,display:'flex',alignItems:'center',gap:6}}><ICheck s={13} c={C.grn}/> Virkur</div>:<div style={{fontSize:12,color:'#5f6773'}}>web3forms.com → settu inn bl.froskur@gmail.com → "Create Access Key"</div>}
               </div>
               <Field label="Web3Forms lykill" value={settW3} onChange={setSettW3} placeholder={web3Key?'•••••••••':'xxxxxxxx-xxxx-...'} small/>
 
@@ -1156,10 +1158,10 @@ function App(){
 
               {/* imgbb — for photo suggestions (Web3Forms free tier has no attachments) */}
               <div style={{background:'rgba(168,85,247,.06)',border:`1px solid rgba(168,85,247,.15)`,borderRadius:10,padding:'12px 14px',marginBottom:14}}>
-                <div style={{fontSize:11,color:'#c084fc',fontWeight:600,marginBottom:4}}>IMGBB (myndir í vöru-tillögum)</div>
+                <div style={{fontSize:11,color:'#7e22ce',fontWeight:600,marginBottom:4}}>IMGBB (myndir í vöru-tillögum)</div>
                 {imgbbKey
                   ?<div style={{fontSize:12,color:C.grn,display:'flex',alignItems:'center',gap:6}}><ICheck s={13} c={C.grn}/> Virkur</div>
-                  :<div style={{fontSize:12,color:'#888',lineHeight:1.5}}>Web3Forms ókeypis áætlunin styður ekki viðhengi.<br/>api.imgbb.com → "Get API Key" → afritaðu</div>}
+                  :<div style={{fontSize:12,color:'#5f6773',lineHeight:1.5}}>Web3Forms ókeypis áætlunin styður ekki viðhengi.<br/>api.imgbb.com → "Get API Key" → afritaðu</div>}
               </div>
               <Field label="imgbb lykill" value={settImgbb} onChange={setSettImgbb} placeholder={imgbbKey?'•••••••••':'a1b2c3...'} small/>
 
@@ -1276,8 +1278,8 @@ function App(){
             <>
               <div style={{background:'rgba(34,197,94,.08)',border:`1px solid rgba(34,197,94,.2)`,borderRadius:10,padding:'12px 14px',marginBottom:12}}>
                 <div style={{fontSize:13,color:C.grn,fontWeight:700,marginBottom:4}}>{bulkPreview.items.length} vörur fundust</div>
-                {bulkPreview.newCats.length>0&&<div style={{fontSize:12,color:'#fbbf24',marginTop:4}}>+ {bulkPreview.newCats.length} nýir flokkar: {bulkPreview.newCats.join(', ')}</div>}
-                {bulkPreview.newSups.length>0&&<div style={{fontSize:12,color:'#c084fc',marginTop:4}}>+ {bulkPreview.newSups.length} nýir birgjar: {bulkPreview.newSups.join(', ')}</div>}
+                {bulkPreview.newCats.length>0&&<div style={{fontSize:12,color:'#b45309',marginTop:4}}>+ {bulkPreview.newCats.length} nýir flokkar: {bulkPreview.newCats.join(', ')}</div>}
+                {bulkPreview.newSups.length>0&&<div style={{fontSize:12,color:'#7e22ce',marginTop:4}}>+ {bulkPreview.newSups.length} nýir birgjar: {bulkPreview.newSups.join(', ')}</div>}
               </div>
               <div style={{maxHeight:200,overflowY:'auto',background:C.bg,border:`1px solid ${C.bd}`,borderRadius:10,padding:'8px 12px',marginBottom:14}}>
                 {bulkPreview.items.slice(0,50).map((it,i)=>(
@@ -1379,7 +1381,7 @@ function App(){
               <span style={{fontSize:16,fontWeight:700,color:C.acc}}>{countOrders(statsItem.entries,statsItem.item,p.m)}× pantað</span>
             </div>
           ))}
-          <div style={{fontSize:11,color:'#555',marginTop:14,lineHeight:1.5}}>Byggt á fjölda skráðra pöntunarfærslna í sögunni sem innihalda þessa vöru.</div>
+          <div style={{fontSize:11,color:'#6b7280',marginTop:14,lineHeight:1.5}}>Byggt á fjölda skráðra pöntunarfærslna í sögunni sem innihalda þessa vöru.</div>
         </Sheet>
       )}
 
@@ -1416,7 +1418,7 @@ function App(){
           <div style={{fontWeight:700,fontSize:17,marginBottom:3}}>Senda yfirlit</div>
           <div style={{fontSize:12,color:C.mut,marginBottom:2}}>Stinga upp á að senda á:</div>
           <div style={{fontSize:13,color:C.acc,fontWeight:600,fontFamily:"'Fira Code',monospace",marginBottom:12}}>{orderShare.to}</div>
-          <div style={{background:C.bg,borderRadius:10,padding:'10px 12px',fontSize:11,fontFamily:"'Fira Code',monospace",color:'#888',maxHeight:200,overflowY:'auto',marginBottom:14,whiteSpace:'pre-wrap',border:`1px solid ${C.bd}`,lineHeight:1.6}}>{orderShare.body}</div>
+          <div style={{background:C.bg,borderRadius:10,padding:'10px 12px',fontSize:11,fontFamily:"'Fira Code',monospace",color:'#5f6773',maxHeight:200,overflowY:'auto',marginBottom:14,whiteSpace:'pre-wrap',border:`1px solid ${C.bd}`,lineHeight:1.6}}>{orderShare.body}</div>
 
           <div style={{background:'rgba(245,158,11,.08)',border:`1px solid rgba(245,158,11,.2)`,borderRadius:10,padding:'10px 12px',marginBottom:14}}>
             <div style={{fontSize:11,color:C.amb,fontWeight:600,marginBottom:6}}>💡 Mundu að setja inn beiðnanúmer áður en nýtt tölvupóstur er stofnaður</div>
@@ -1456,7 +1458,7 @@ function App(){
       )}
 
       {/* TOAST */}
-      {toast&&<div className="anim" style={{position:'absolute',bottom:72,left:'50%',transform:'translateX(-50%)',background:'#1e1e1e',border:`1px solid ${C.bd}`,borderRadius:20,padding:'7px 16px',fontSize:12,color:C.txt,whiteSpace:'nowrap',boxShadow:'0 4px 20px rgba(0,0,0,.5)',zIndex:300,pointerEvents:'none'}}>{toast}</div>}
+      {toast&&<div className="anim" style={{position:'absolute',bottom:72,left:'50%',transform:'translateX(-50%)',background:'#1e1e1e',border:`1px solid ${C.bd}`,borderRadius:20,padding:'7px 16px',fontSize:12,color:'#fff',whiteSpace:'nowrap',boxShadow:'0 4px 20px rgba(0,0,0,.5)',zIndex:300,pointerEvents:'none'}}>{toast}</div>}
     </div>
   );
 }
