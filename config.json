@@ -6,7 +6,8 @@
   "firebase_url": "https://pantaamj-default-rtdb.europe-west1.firebasedatabase.app/",
   "extra_categories": [
     "Verkfæri",
-    "Rafmagnsverkfæri"
+    "Rafmagnsverkfæri",
+    "Tengi"
   ],
   "extra_suppliers": {
     "Sindri": "valur@sindri.is"
