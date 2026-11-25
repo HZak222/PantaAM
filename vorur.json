@@ -774,5 +774,13 @@
     "sup": "Sindri",
     "cat": "Verkfæri",
     "qty": "1 stk"
+  },
+  {
+    "id": "u1795647021592",
+    "name": "PRufa",
+    "sku": "e3423mf",
+    "sup": "Kemi",
+    "cat": "Perur",
+    "qty": "5 stk"
   }
 ]
